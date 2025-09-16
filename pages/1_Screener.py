@@ -548,11 +548,46 @@ def build_structured_stats(px: pd.DataFrame) -> dict:
         "vol_trend": vol_trend
     }
 
-def call_llm_structured_report(api_key: str, model: str, symbol: str, tech_stats: dict) -> str:
+def auto_generate_report_if_possible(symbol: str, tech_stats: dict, llm_model: str, company_name: str = None) -> bool:
+    """
+    Tự động tạo báo cáo nếu có API key và chưa có báo cáo cho symbol này.
+    Returns True nếu đã tạo báo cáo thành công.
+    """
+    key = st.session_state.get("openai_api_key", "") or ""
+    if not key or not _OPENAI_OK:
+        return False
+    
+    # Kiểm tra nếu đã có báo cáo cho symbol này rồi
+    existing_report = (st.session_state.get("form_cache") or {}).get(symbol)
+    if existing_report:
+        return True
+    
+    try:
+        model = llm_model or "gpt-4o-mini"
+        template = st.session_state.get("analysis_template", "")
+        prompt = st.session_state.get("analysis_prompt", "")
+        system_prompt = st.session_state.get("system_prompt", "")
+        
+        with st.spinner(f"🤖 Đang tự động phân tích {symbol}..."):
+            report = call_llm_structured_report(
+                key, model, symbol, tech_stats,
+                template=template, prompt=prompt, system_prompt=system_prompt, company_name=company_name
+            )
+            
+        st.session_state.setdefault("form_cache", {})[symbol] = report
+        return True
+    except Exception as e:
+        st.error(f"❌ Lỗi tự động tạo báo cáo cho {symbol}: {e}")
+        return False
+
+def call_llm_structured_report(api_key: str, model: str, symbol: str, tech_stats: dict, 
+                              template: str = None, prompt: str = None, system_prompt: str = None, company_name: str = None) -> str:
     if not _OPENAI_OK or not api_key:
         return "⛔ Chưa cấu hình OpenAI API key."
 
-    TEMPLATE = (
+    # Sử dụng template từ tham số hoặc mặc định
+    default_template = (
+        "📊 PHÂN TÍCH KỸ THUẬT - {symbol}\n\n"
         "PHÂN TÍCH KỸ THUẬT\n\n"
         "1. Xu hướng giá:\n- ...\n- ...\n- ...\n\n"
         "2. Đường MA (20/50/200):\n- MA20: ...\n- MA50: ...\n- MA200: ...\n\n"
@@ -562,23 +597,39 @@ def call_llm_structured_report(api_key: str, model: str, symbol: str, tech_stats
         "- Ngắn hạn: ...\n- Trung hạn: ...\n\n"
         "Chiến lược:\n- Lướt sóng: ...\n- Trung hạn: ..."
     )
-
-    guidance = (
+    
+    used_template = template or default_template
+    
+    # Format template với symbol và company name
+    display_company_name = company_name or "—"
+    formatted_template = used_template.format(symbol=symbol, company_name=display_company_name)
+    
+    # Sử dụng prompt từ tham số hoặc mặc định
+    default_prompt = (
         "Bạn là chuyên gia PTKT cổ phiếu Việt Nam. Dựa **duy nhất** vào dữ liệu cung cấp, "
         "hãy viết báo cáo đúng **form mẫu** (tiếng Việt, ngắn gọn). Chỉ đánh giá MA20/MA50/MA200.\n\n"
-        f"{TEMPLATE}\n\n"
+        "TEMPLATE:\n{template}\n\n"
+        "HƯỚNG DẪN:\n"
+        "- Bắt đầu báo cáo bằng header có mã cổ phiếu và tên công ty như trong template.\n"
         "- 'Đường MA' nêu hướng (lên/xuống/đi ngang) + vai trò (hỗ trợ/kháng cự) theo độ dốc & vị trí giá.\n"
         "- 'Khối lượng' so sánh trung bình 20 vs 60 phiên.\n"
         "- 'Hỗ trợ & Kháng cự' dựa pivot gần nhất, MA và 52W.\n"
         "- 'Lướt sóng/Trung hạn' có vùng mua tham khảo, stoploss (~1–1.5×ATR%), mục tiêu theo kháng cự/đỉnh cũ.\n"
         "- Định dạng số có **dấu phẩy** (vd 31,000). Không coi đây là khuyến nghị đầu tư."
     )
+    
+    used_prompt = prompt or default_prompt
+    guidance = used_prompt.format(template=formatted_template)
+    
+    # Sử dụng system prompt từ tham số hoặc mặc định
+    default_system_prompt = "Bạn là chuyên gia phân tích kỹ thuật cổ phiếu Việt Nam, viết báo cáo theo template được cung cấp."
+    used_system_prompt = system_prompt or default_system_prompt
 
     payload = {"symbol": symbol, **tech_stats}
     try:
         client = OpenAI(api_key=api_key)
         msgs = [
-            {"role": "system", "content": "Bạn là chuyên gia phân tích kỹ thuật cổ phiếu Việt Nam, viết kỷ luật theo template."},
+            {"role": "system", "content": used_system_prompt},
             {"role": "user", "content": guidance + "\n\nDỮ LIỆU:\n" + json.dumps(payload, ensure_ascii=False)}
         ]
         out = client.chat.completions.create(model=model, messages=msgs, temperature=0.15, max_tokens=1000)
@@ -692,6 +743,61 @@ with st.sidebar:
                     del st.session_state.watchlists[selected_wl]
                     st.session_state.current_watchlist = next(iter(st.session_state.watchlists.keys()))
                     st.success(f"✅ Đã xóa '{selected_wl}'")
+    
+    # =========================
+    # AI Reports Management
+    # =========================
+    st.markdown("---")
+    st.markdown("""
+    <div class="section-header">
+        <h3>🤖 Báo cáo AI</h3>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    cached_reports = st.session_state.get("form_cache", {})
+    if cached_reports:
+        st.info(f"📝 Có {len(cached_reports)} báo cáo AI trong cache")
+        
+        # Hiển thị danh sách báo cáo
+        for symbol in sorted(cached_reports.keys()):
+            with st.expander(f"📄 {symbol}", expanded=False):
+                report_text = cached_reports[symbol]
+                st.markdown(report_text)
+                
+                # Nút download cho từng báo cáo
+                st.download_button(
+                    label="⬇️ Tải báo cáo",
+                    data="\ufeff" + report_text,
+                    file_name=f"{symbol}_AI_Report.txt",
+                    mime="text/plain; charset=utf-8",
+                    key=f"download_{symbol}"
+                )
+        
+        # Nút xóa tất cả báo cáo
+        if st.button("🗑️ Xóa tất cả báo cáo AI", key="clear_all_reports", 
+                    help="Xóa tất cả báo cáo AI đã cached", type="secondary"):
+            st.session_state["form_cache"] = {}
+            st.success("✅ Đã xóa tất cả báo cáo AI")
+            st.rerun()
+            
+        # Nút download tất cả báo cáo
+        if len(cached_reports) > 1:
+            all_reports = ""
+            for symbol, report in cached_reports.items():
+                all_reports += f"{'='*50}\n"
+                all_reports += f"BÁO CÁO PHÂN TÍCH: {symbol}\n"
+                all_reports += f"{'='*50}\n\n"
+                all_reports += report + "\n\n"
+            
+            st.download_button(
+                label="📦 Tải tất cả báo cáo",
+                data="\ufeff" + all_reports,
+                file_name="All_AI_Reports.txt",
+                mime="text/plain; charset=utf-8",
+                key="download_all_reports"
+            )
+    else:
+        st.info("📝 Chưa có báo cáo AI nào. Nhập API key và phân tích để tạo báo cáo tự động.")
 
 # =========================
 # MAIN CONTENT - Quick Analysis Section
@@ -769,6 +875,185 @@ with st.expander("⚙️ Cấu hình nâng cao", expanded=False):
             0, 1000, 300, 50,
             help="Thời gian chờ giữa các lệnh gọi API"
         )
+
+# =========================
+# Cấu hình Prompt và Template (Riêng biệt)
+# =========================
+with st.expander("📝 Cấu hình Prompt & Template AI", expanded=False):
+    st.markdown("### 🛠️ Tùy chỉnh cách AI tạo báo cáo phân tích")
+    st.info("💡 **Hướng dẫn:** Bạn có thể tùy chỉnh template báo cáo và prompt hướng dẫn để AI tạo ra báo cáo theo ý muốn.")
+    
+    col_template, col_prompt = st.columns(2)
+    
+    with col_template:
+        st.markdown("**📋 Template báo cáo**")
+        # Template configuration
+        default_template = (
+            "PHÂN TÍCH KỸ THUẬT\n\n"
+            "1. Xu hướng giá:\n- ...\n- ...\n- ...\n\n"
+            "2. Đường MA (20/50/200):\n- MA20: ...\n- MA50: ...\n- MA200: ...\n\n"
+            "3. Khối lượng:\n- ...\n- ...\n\n"
+            "4. Hỗ trợ & Kháng cự:\n- Kháng cự: ...\n- Hỗ trợ gần: ...\n- Hỗ trợ sâu: ...\n\n"
+            "NHẬN ĐỊNH NHANH & CHIẾN LƯỢC\n\n"
+            "- Ngắn hạn: ...\n- Trung hạn: ...\n\n"
+            "Chiến lược:\n- Lướt sóng: ...\n- Trung hạn: ..."
+        )
+        
+        analysis_template = st.text_area(
+            "Template mẫu báo cáo",
+            value=st.session_state.get("analysis_template", default_template),
+            height=300,
+            help="Định dạng template cho báo cáo phân tích. Sử dụng ... để AI điền nội dung.",
+            key="template_area"
+        )
+        st.session_state["analysis_template"] = analysis_template
+        
+        if st.button("🔄 Reset Template", help="Khôi phục template mặc định", key="reset_template"):
+            st.session_state["analysis_template"] = default_template
+            st.rerun()
+    
+    with col_prompt:
+        st.markdown("**💬 Prompt hướng dẫn**")
+        # Prompt configuration
+        default_prompt = (
+            "Bạn là chuyên gia PTKT cổ phiếu Việt Nam. Dựa **duy nhất** vào dữ liệu cung cấp, "
+            "hãy viết báo cáo đúng **form mẫu** (tiếng Việt, ngắn gọn). Chỉ đánh giá MA20/MA50/MA200.\n\n"
+            "TEMPLATE:\n{template}\n\n"
+            "HƯỚNG DẪN:\n"
+            "- 'Đường MA' nêu hướng (lên/xuống/đi ngang) + vai trò (hỗ trợ/kháng cự) theo độ dốc & vị trí giá.\n"
+            "- 'Khối lượng' so sánh trung bình 20 vs 60 phiên.\n"
+            "- 'Hỗ trợ & Kháng cự' dựa pivot gần nhất, MA và 52W.\n"
+            "- 'Lướt sóng/Trung hạn' có vùng mua tham khảo, stoploss (~1–1.5×ATR%), mục tiêu theo kháng cự/đỉnh cũ.\n"
+            "- Định dạng số có **dấu phẩy** (vd 31,000). Không coi đây là khuyến nghị đầu tư."
+        )
+        
+        analysis_prompt = st.text_area(
+            "Hướng dẫn chi tiết cho AI",
+            value=st.session_state.get("analysis_prompt", default_prompt),
+            height=200,
+            help="Hướng dẫn cho AI về cách phân tích. Sử dụng {template} để chèn template.",
+            key="prompt_area"
+        )
+        st.session_state["analysis_prompt"] = analysis_prompt
+        
+        # System prompt configuration
+        default_system_prompt = "Bạn là chuyên gia phân tích kỹ thuật cổ phiếu Việt Nam, viết báo cáo theo template được cung cấp."
+        
+        system_prompt = st.text_area(
+            "System Prompt (Vai trò AI)",
+            value=st.session_state.get("system_prompt", default_system_prompt),
+            height=80,
+            help="Vai trò và ngữ cảnh cho AI.",
+            key="system_prompt_area"
+        )
+        st.session_state["system_prompt"] = system_prompt
+        
+        if st.button("🔄 Reset Prompts", help="Khôi phục prompts mặc định", key="reset_prompts"):
+            st.session_state["analysis_prompt"] = default_prompt
+            st.session_state["system_prompt"] = default_system_prompt
+            st.rerun()
+    
+    # Preview section
+    st.markdown("---")
+    st.markdown("**👁️ Xem trước cấu hình hiện tại:**")
+    
+    col_preview1, col_preview2 = st.columns(2)
+    with col_preview1:
+        with st.container(border=True):
+            st.markdown("**Template sẽ sử dụng:**")
+            st.code(st.session_state.get("analysis_template", default_template)[:200] + "...", language="text")
+    
+    with col_preview2:
+        with st.container(border=True):
+            st.markdown("**System Prompt:**")
+            st.code(st.session_state.get("system_prompt", default_system_prompt), language="text")
+    
+    # Template presets
+    st.markdown("---")
+    st.markdown("**🎨 Template có sẵn:**")
+    
+    col_preset1, col_preset2, col_preset3 = st.columns(3)
+    
+    with col_preset1:
+        if st.button("📊 Template Cơ bản", help="Template phân tích cơ bản", key="preset_basic"):
+            st.session_state["analysis_template"] = default_template
+            st.rerun()
+    
+    with col_preset2:
+        if st.button("📈 Template Chi tiết", help="Template phân tích chi tiết hơn", key="preset_detailed"):
+            detailed_template = (
+                "PHÂN TÍCH KỸ THUẬT CHI TIẾT\n\n"
+                "1. Tổng quan thị trường:\n- Xu hướng tổng thể: ...\n- Vị trí trong chu kỳ: ...\n\n"
+                "2. Phân tích giá:\n- Xu hướng ngắn hạn (1-5 ngày): ...\n- Xu hướng trung hạn (1-4 tuần): ...\n- Xu hướng dài hạn (1-3 tháng): ...\n\n"
+                "3. Đường trung bình động:\n- SMA9: ...\n- SMA20: ...\n- SMA50: ...\n- SMA200: ...\n\n"
+                "4. Khối lượng giao dịch:\n- Khối lượng hiện tại vs TB20: ...\n- Khối lượng hiện tại vs TB60: ...\n- Đánh giá thanh khoản: ...\n\n"
+                "5. Hỗ trợ & Kháng cự:\n- Kháng cự gần nhất: ...\n- Kháng cự mạnh: ...\n- Hỗ trợ gần nhất: ...\n- Hỗ trợ mạnh: ...\n\n"
+                "6. Chỉ báo kỹ thuật:\n- RSI: ...\n- ATR: ...\n- Đỉnh/đáy 52 tuần: ...\n\n"
+                "CHIẾN LƯỢC ĐẦU TƯ\n\n"
+                "• Ngắn hạn (1-2 tuần):\n- Xu hướng: ...\n- Vùng mua: ...\n- Stop-loss: ...\n- Take-profit: ...\n\n"
+                "• Trung hạn (1-3 tháng):\n- Xu hướng: ...\n- Vùng tích lũy: ...\n- Mục tiêu: ...\n\n"
+                "• Rủi ro cần lưu ý: ..."
+            )
+            st.session_state["analysis_template"] = detailed_template
+            st.rerun()
+    
+    with col_preset3:
+        if st.button("⚡ Template Nhanh", help="Template báo cáo ngắn gọn", key="preset_quick"):
+            quick_template = (
+                "PHÂN TÍCH NHANH\n\n"
+                "📈 Xu hướng: ...\n"
+                "📊 MA20/50/200: ... / ... / ...\n"
+                "📦 Khối lượng: ...\n"
+                "🔺 Kháng cự: ...\n"
+                "🔻 Hỗ trợ: ...\n\n"
+                "⚡ CHIẾN LƯỢC:\n"
+                "• Ngắn hạn: ...\n"
+                "• Vùng mua: ...\n"
+                "• Stop-loss: ...\n"
+                "• Mục tiêu: ..."
+            )
+            st.session_state["analysis_template"] = quick_template
+            st.rerun()
+    
+    # Import/Export configuration
+    st.markdown("---")
+    st.markdown("**💾 Sao lưu & Khôi phục cấu hình:**")
+    
+    col_export, col_import = st.columns(2)
+    
+    with col_export:
+        if st.button("📤 Export cấu hình", help="Xuất cấu hình hiện tại", key="export_config"):
+            config_data = {
+                "analysis_template": st.session_state.get("analysis_template", default_template),
+                "analysis_prompt": st.session_state.get("analysis_prompt", default_prompt),
+                "system_prompt": st.session_state.get("system_prompt", default_system_prompt)
+            }
+            config_json = json.dumps(config_data, ensure_ascii=False, indent=2)
+            st.download_button(
+                label="⬇️ Tải file cấu hình",
+                data=config_json,
+                file_name="ai_analysis_config.json",
+                mime="application/json"
+            )
+    
+    with col_import:
+        uploaded_config = st.file_uploader(
+            "📤 Import cấu hình", 
+            type=["json"], 
+            help="Tải lên file cấu hình đã xuất trước đó",
+            key="import_config"
+        )
+        
+        if uploaded_config is not None:
+            try:
+                config_data = json.load(uploaded_config)
+                st.session_state["analysis_template"] = config_data.get("analysis_template", default_template)
+                st.session_state["analysis_prompt"] = config_data.get("analysis_prompt", default_prompt)
+                st.session_state["system_prompt"] = config_data.get("system_prompt", default_system_prompt)
+                st.success("✅ Đã import cấu hình thành công!")
+                st.rerun()
+            except Exception as e:
+                st.error(f"❌ Lỗi khi import cấu hình: {e}")
 
 # =========================
 # Resolve dates & symbols with default values
@@ -889,9 +1174,78 @@ def run_analysis_and_store():
     if "form_cache" not in st.session_state:
         st.session_state["form_cache"] = {}
 
+def auto_analyze_all_symbols_in_background():
+    """Tự động phân tích tất cả các mã trong nền nếu có API key"""
+    api_key = st.session_state.get("openai_api_key", "") or ""
+    if not api_key or not _OPENAI_OK:
+        return
+    
+    store = st.session_state.get("screener_store", {})
+    if not store:
+        return
+        
+    ranked = store.get("ranked", pd.DataFrame())
+    if ranked.empty:
+        return
+        
+    # Lấy top symbols
+    top_syms = ranked.head(20)["symbol"].tolist()
+    px_map = store.get("px_map", {})
+    snapshot_df = store.get("snapshot_df", pd.DataFrame())
+    
+    # Đếm số mã chưa có báo cáo
+    cached_reports = st.session_state.get("form_cache", {})
+    symbols_to_analyze = [sym for sym in top_syms if sym not in cached_reports]
+    
+    if not symbols_to_analyze:
+        st.success("✅ Tất cả các mã đã có báo cáo AI!")
+        return
+    
+    # Hiển thị progress
+    st.info(f"🤖 Đang tự động tạo báo cáo AI cho {len(symbols_to_analyze)} mã trong nền...")
+    progress_bar = st.progress(0)
+    status_text = st.empty()
+    
+    # Phân tích từng mã
+    for i, symbol in enumerate(symbols_to_analyze):
+        status_text.text(f"Đang phân tích {symbol} ({i+1}/{len(symbols_to_analyze)})...")
+        
+        # Lấy dữ liệu kỹ thuật
+        px_sel = px_map.get(symbol, pd.DataFrame())
+        if px_sel.empty:
+            continue
+            
+        tech_stats = build_structured_stats(px_sel)
+        company_name = _company_name_from_snapshot(snapshot_df, symbol)
+        
+        # Tạo báo cáo
+        try:
+            model = st.session_state.get("llm_model", "gpt-4o-mini")
+            template = st.session_state.get("analysis_template", "")
+            prompt = st.session_state.get("analysis_prompt", "")
+            system_prompt = st.session_state.get("system_prompt", "")
+            
+            report = call_llm_structured_report(
+                api_key, model, symbol, tech_stats,
+                template=template, prompt=prompt, system_prompt=system_prompt, company_name=company_name
+            )
+            st.session_state.setdefault("form_cache", {})[symbol] = report
+        except Exception as e:
+            st.warning(f"⚠️ Lỗi tạo báo cáo cho {symbol}: {e}")
+        
+        # Cập nhật progress
+        progress_bar.progress((i + 1) / len(symbols_to_analyze))
+    
+    status_text.text("Hoàn thành!")
+    progress_bar.progress(1.0)
+    st.success(f"🎉 Đã tạo xong báo cáo AI cho {len(symbols_to_analyze)} mã!")
+
 if analyze_btn:
     with st.spinner("🔄 Đang phân tích dữ liệu..."):
         run_analysis_and_store()
+    
+    # Tự động phân tích AI trong nền nếu có API key
+    auto_analyze_all_symbols_in_background()
 
 # =========================
 # Enhanced Results Display
@@ -913,7 +1267,6 @@ else:
     
     # Summary metrics
     total_analyzed = len(ranked)
-    avg_score = ranked['score'].mean() if 'score' in ranked.columns else 0
     top_performer = ranked.iloc[0]['symbol'] if len(ranked) > 0 else "N/A"
     
     st.markdown(f"""
@@ -923,7 +1276,7 @@ else:
     """, unsafe_allow_html=True)
     
     # Summary cards
-    col1, col2, col3, col4 = st.columns(4)
+    col1, col2, col3 = st.columns(3)
     with col1:
         st.markdown(f"""
         <div class="metric-card">
@@ -936,22 +1289,13 @@ else:
     with col2:
         st.markdown(f"""
         <div class="metric-card">
-            <h4>⭐ Điểm trung bình</h4>
-            <h2 style="color: #2a5298;">{avg_score:.2f}</h2>
-            <small>Điểm số tổng hợp</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        st.markdown(f"""
-        <div class="metric-card">
             <h4>🥇 Top performer</h4>
             <h2 style="color: #28a745;">{top_performer}</h2>
             <small>Cổ phiếu tốt nhất</small>
         </div>
         """, unsafe_allow_html=True)
     
-    with col4:
+    with col3:
         analyzed_date = store.get('ed_str', 'N/A')
         st.markdown(f"""
         <div class="metric-card">
@@ -1001,17 +1345,6 @@ else:
         valid_adtv = view[adtv_col].apply(lambda x: not pd.isna(x) and x > 0).sum()
         total_stocks = len(view)
         
-        # Debug: in ra giá trị ADTV thô trước khi format
-        if total_stocks > 0:
-            sample_values = view[adtv_col].head(3).tolist()
-            sample_symbols = view["symbol"].head(3).tolist()
-            st.info(f"📊 Debug ADTV: {valid_adtv}/{total_stocks} mã có dữ liệu. Mẫu: {list(zip(sample_symbols, sample_values))}")
-            
-            # In giá trị max để hiểu scale
-            max_val = view[adtv_col].max()
-            min_val = view[adtv_col].min()
-            st.info(f"🔍 ADTV Range: Min={min_val:.2e}, Max={max_val:.2e}")
-        
         # Kiểm tra khoảng giá trị để quyết định đơn vị hiển thị
         max_adtv = view[adtv_col].max() if not view[adtv_col].empty else 0
         
@@ -1023,25 +1356,13 @@ else:
             view["adtv"] = view[adtv_col].apply(lambda x: "N/A" if pd.isna(x) or x <= 0 else f"{x/1e3:.1f} k")
         else:  # Nhỏ hơn → hiển thị nguyên giá trị
             view["adtv"] = view[adtv_col].apply(lambda x: "N/A" if pd.isna(x) or x <= 0 else f"{x:.2f}")
-        
-        # Hiển thị thông tin về đơn vị
-        if max_adtv > 0:
-            if max_adtv > 1e9:
-                unit_info = "tỷ VND"
-            elif max_adtv > 1e6:
-                unit_info = "triệu VND"  
-            elif max_adtv > 1e3:
-                unit_info = "nghìn VND"
-            else:
-                unit_info = "VND (giá trị thô - có thể cần fix)"
-            st.info(f"💡 ADTV hiển thị theo đơn vị: {unit_info}. Giá trị max: {max_adtv:,.0f}")
-        
-        # Hiển thị thông tin debug nếu cần
-        if valid_adtv < total_stocks:
-            st.info(f"💡 Thông tin: {valid_adtv}/{total_stocks} mã có dữ liệu ADTV. Một số mã có thể thiếu dữ liệu volume.")
+
+    # Thêm cột AI Report status
+    cached_reports = st.session_state.get("form_cache", {})
+    view["ai_status"] = view.index.map(lambda x: "✅ Có" if x in cached_reports else "⏳ Chưa")
 
     cols = [c for c in [
-        "symbol","score","Value","Quality","Growth","Momentum","Liquidity","RiskAdj",
+        "symbol","score","Value","Quality","Growth","Momentum","Liquidity","RiskAdj","ai_status",
         "m1","m3","m6","pe","pb","roe","rev_yoy","eps_yoy","net_margin","adtv"
     ] if c in view.columns]
 
@@ -1055,6 +1376,7 @@ else:
         "Momentum": "Xu hướng giá (1–3–6 tháng). Dương/tốt → điểm cao.",
         "Liquidity": "Thanh khoản (ADTV). Cao dễ giao dịch.",
         "RiskAdj": "Điểm rủi ro điều chỉnh theo biến động (vol thấp được cộng điểm).",
+        "ai_status": "Trạng thái báo cáo AI. ✅ = Đã có báo cáo, ⏳ = Chưa có.",
         "m1": "Hiệu suất ~1 tháng (%). Dương → tăng. Âm → giảm",
         "m3": "Hiệu suất ~3 tháng (%). Dương → tăng. Âm → giảm",
         "m6": "Hiệu suất ~6 tháng (%). Dương → tăng. Âm → giảm",
@@ -1077,6 +1399,7 @@ else:
         "Momentum": cc.TextColumn("Xu hướng", help=col_help["Momentum"]),
         "Liquidity": cc.TextColumn("Thanh khoản", help=col_help["Liquidity"]),
         "RiskAdj": cc.TextColumn("Rủi ro", help=col_help["RiskAdj"]),
+        "ai_status": cc.TextColumn("AI Report", help=col_help["ai_status"]),
         "m1": cc.TextColumn("1 tháng (%)", help=col_help["m1"]),
         "m3": cc.TextColumn("3 tháng (%)", help=col_help["m3"]),
         "m6": cc.TextColumn("6 tháng (%)", help=col_help["m6"]),
@@ -1134,6 +1457,8 @@ else:
         st.subheader("📊 Biểu đồ & bảng lịch sử (chọn mã)")
 
         top_syms = list(ranked["symbol"].head(min(10, len(ranked))))
+        # Lưu top_syms để sử dụng trong auto-advance
+        st.session_state["top_syms"] = top_syms
         if "selected_symbol" not in st.session_state:
             st.session_state["selected_symbol"] = top_syms[0]
 
@@ -1257,23 +1582,220 @@ else:
 
             # ====== 📄 Báo cáo theo FORM kỹ thuật (MA20/50/200) ======
             st.markdown("---")
-            st.markdown("### 📄 Báo cáo theo form kỹ thuật (MA20/50/200)")
+            
+            # Quick Symbol Selector cho báo cáo AI
+            st.markdown("### 📄 Báo cáo AI - Phân tích kỹ thuật")
+            
+            # Hiển thị mã đang được phân tích
+            current_analyzing_symbol = st.session_state.get("selected_symbol", "")
+            if current_analyzing_symbol:
+                st.markdown(f"""
+                <div style="background: linear-gradient(90deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%); 
+                           padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ff6b6b;">
+                    <h4 style="margin: 0; color: #2c3e50;">
+                        🔍 Đang phân tích: <strong>{current_analyzing_symbol}</strong>
+                    </h4>
+                </div>
+                """, unsafe_allow_html=True)
+            
+            # Hiển thị tiến trình báo cáo AI
+            store = st.session_state.get("screener_store", {})
+            if store:
+                ranked = store.get("ranked", pd.DataFrame())
+                if not ranked.empty:
+                    top_syms = ranked.head(20)["symbol"].tolist()
+                    cached_reports = st.session_state.get("form_cache", {})
+                    reports_count = len([s for s in top_syms if s in cached_reports])
+                    total_count = len(top_syms)
+                    progress_pct = (reports_count / total_count) * 100 if total_count > 0 else 0
+                    
+                    st.markdown(f"""
+                    <div style="background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%); 
+                               padding: 12px; border-radius: 6px; margin-bottom: 15px;">
+                        <p style="margin: 0; color: white; font-weight: bold;">
+                            📊 Tiến trình báo cáo AI: {reports_count}/{total_count} ({progress_pct:.0f}%)
+                        </p>
+                    </div>
+                    """, unsafe_allow_html=True)
+            
+            # Tạo container có border để làm nổi bật
+            with st.container(border=True):
+                st.markdown("**🎯 Chọn mã cổ phiếu để xem báo cáo AI:**")
+                
+                # Thêm quick bookmarks cho các mã thường xem
+                if "ai_bookmarks" not in st.session_state:
+                    st.session_state["ai_bookmarks"] = []
+                
+                bookmarks = st.session_state["ai_bookmarks"]
+                if bookmarks:
+                    st.markdown("**⭐ Mã đã đánh dấu:**")
+                    bookmark_cols = st.columns(min(len(bookmarks), 6))
+                    for i, bookmark in enumerate(bookmarks[:6]):  # Giới hạn 6 bookmark hiển thị
+                        with bookmark_cols[i]:
+                            cached_reports = st.session_state.get("form_cache", {})
+                            status_emoji = "✅" if bookmark in cached_reports else "⏳"
+                            if st.button(f"{status_emoji} {bookmark}", key=f"bookmark_{bookmark}", 
+                                       use_container_width=True, help=f"Chuyển đến {bookmark}"):
+                                st.session_state["selected_symbol"] = bookmark
+                                st.rerun()
+                
+                col_quick1, col_quick2 = st.columns([2, 1])
+                
+                with col_quick1:
+                    # Quick selector từ top symbols
+                    cached_reports = st.session_state.get("form_cache", {})
+                    
+                    # Tạo danh sách với báo cáo có sẵn ở đầu
+                    symbols_with_reports = [s for s in top_syms if s in cached_reports]
+                    symbols_without_reports = [s for s in top_syms if s not in cached_reports]
+                    ordered_symbols = symbols_with_reports + symbols_without_reports
+                    
+                    # Hiển thị trạng thái báo cáo trong selectbox options
+                    symbol_options = []
+                    for sym in ordered_symbols:
+                        if sym in cached_reports:
+                            symbol_options.append(f"✅ {sym}")
+                        else:
+                            symbol_options.append(f"⏳ {sym}")
+                    
+                    # Tìm index hiện tại
+                    current_symbol = st.session_state.get("selected_symbol", ordered_symbols[0] if ordered_symbols else "")
+                    try:
+                        if current_symbol in cached_reports:
+                            current_index = symbol_options.index(f"✅ {current_symbol}")
+                        else:
+                            current_index = symbol_options.index(f"⏳ {current_symbol}")
+                    except ValueError:
+                        current_index = 0
+                    
+                    selected_option = st.selectbox(
+                        "Chọn mã từ danh sách:",
+                        options=symbol_options,
+                        index=current_index,
+                        key="ai_symbol_selector",
+                        help="✅ = Đã có báo cáo AI, ⏳ = Chưa có báo cáo"
+                    )
+                    
+                    # Cập nhật selected_symbol từ quick selector
+                    if selected_option:
+                        new_symbol = selected_option.split(" ", 1)[1]  # Lấy phần sau emoji
+                        if new_symbol != st.session_state.get("selected_symbol"):
+                            st.session_state["selected_symbol"] = new_symbol
+                            st.rerun()
+                
+                with col_quick2:
+                    # Bookmark và manual input
+                    bookmark_col, manual_col = st.columns([1, 3])
+                    
+                    current_idx = ordered_symbols.index(current_symbol) if current_symbol in ordered_symbols else 0
+                    
+                    with bookmark_col:
+                        # Bookmark button
+                        is_bookmarked = current_symbol in st.session_state.get("ai_bookmarks", [])
+                        bookmark_icon = "⭐" if is_bookmarked else "☆"
+                        bookmark_help = "Bỏ đánh dấu" if is_bookmarked else "Đánh dấu mã này"
+                        
+                        if st.button(bookmark_icon, key="toggle_bookmark", help=bookmark_help):
+                            if "ai_bookmarks" not in st.session_state:
+                                st.session_state["ai_bookmarks"] = []
+                            
+                            if is_bookmarked:
+                                st.session_state["ai_bookmarks"].remove(current_symbol)
+                            else:
+                                if current_symbol not in st.session_state["ai_bookmarks"]:
+                                    st.session_state["ai_bookmarks"].append(current_symbol)
+                                # Giới hạn số bookmark
+                                if len(st.session_state["ai_bookmarks"]) > 10:
+                                    st.session_state["ai_bookmarks"] = st.session_state["ai_bookmarks"][-10:]
+                            st.rerun()
+                    
+                    with manual_col:
+                        # Quick manual input
+                        manual_symbol = st.text_input(
+                            "Nhập mã khác:",
+                            key="quick_manual_input",
+                            placeholder="VD: VNM",
+                            help="Nhập mã và nhấn Enter"
+                        )
+                        
+                        # Auto-advance option
+                        auto_advance = st.checkbox(
+                            "🔄 Tự động chuyển mã tiếp theo", 
+                            key="auto_advance_symbols",
+                            help="Tự động chuyển đến mã tiếp theo sau 5 giây khi đã có báo cáo"
+                        )
+                    
+                    if manual_symbol and manual_symbol.upper() != st.session_state.get("selected_symbol"):
+                        st.session_state["selected_symbol"] = manual_symbol.upper()
+                        st.rerun()
+            
+            # Cập nhật lại selected_symbol và px_sel
+            selected_symbol = st.session_state["selected_symbol"]
+            px_sel = px_map.get(selected_symbol)
+            if (px_sel is None) or px_sel.empty:
+                try:
+                    price_sources = [store["sources"][0]] if store.get("sources") else ["TCBS"]
+                    px_sel = _get_quote_history_cached(selected_symbol, int(store["params"]["days"]), store["ed_str"], price_sources)
+                    st.session_state["screener_store"]["px_map"][selected_symbol] = px_sel
+                except Exception:
+                    px_sel = pd.DataFrame()
+            
             tech_stats = build_structured_stats(px_sel)
 
-            c1, c2 = st.columns([1, 3])
-            with c1:
-                btn_form = st.button("Tạo báo cáo theo form", key=f"form_btn_{selected_symbol}")
-            with c2:
-                st.caption("Xuất đúng mẫu bạn gửi, dựa trên giá & khối lượng hiện có (RSI/ATR/52W/MA20/50/200).")
+            # Lấy tên công ty từ snapshot
+            store = st.session_state.get("screener_store", {})
+            snapshot_df = store.get("snapshot_df", pd.DataFrame())
+            company_name = _company_name_from_snapshot(snapshot_df, selected_symbol)
 
-            if btn_form:
-                key = st.session_state.get("openai_api_key", "") or ""
-                model = llm_model or "gpt-4o-mini"
-                report = call_llm_structured_report(key, model, selected_symbol, tech_stats)
-                st.session_state.setdefault("form_cache", {})[selected_symbol] = report
+            # Kiểm tra trạng thái báo cáo
+            api_key = st.session_state.get("openai_api_key", "") or ""
+            cached_reports = st.session_state.get("form_cache", {})
+            has_report = selected_symbol in cached_reports
+                
+            # Hiển thị trạng thái báo cáo
+            col_status, col_manual = st.columns([2, 1])
+            
+            with col_status:
+                if not api_key:
+                    st.info("🔑 Nhập OpenAI API Key để sử dụng tính năng phân tích tự động")
+                elif has_report:
+                    st.success("✅ Báo cáo AI đã có sẵn")
+                else:
+                    st.info("⏳ Báo cáo chưa được tạo - chạy phân tích để tự động tạo báo cáo")
+            
+            with col_manual:
+                if api_key:
+                    if st.button("🔄 Tạo lại báo cáo", key=f"regenerate_btn_{selected_symbol}", 
+                               help="Tạo lại báo cáo mới (ghi đè báo cáo hiện tại)"):
+                        # Xóa báo cáo cũ và tạo mới
+                        if "form_cache" in st.session_state and selected_symbol in st.session_state["form_cache"]:
+                            del st.session_state["form_cache"][selected_symbol]
+                        
+                        key = st.session_state.get("openai_api_key", "") or ""
+                        model = llm_model or "gpt-4o-mini"
+                        template = st.session_state.get("analysis_template", "")
+                        prompt = st.session_state.get("analysis_prompt", "")
+                        system_prompt = st.session_state.get("system_prompt", "")
+                        
+                        with st.spinner("🤖 Đang tạo báo cáo mới..."):
+                            report = call_llm_structured_report(
+                                key, model, selected_symbol, tech_stats,
+                                template=template, prompt=prompt, system_prompt=system_prompt, company_name=company_name
+                            )
+                            st.session_state.setdefault("form_cache", {})[selected_symbol] = report
+                        st.rerun()
+                else:
+                    if st.button("📝 Tạo báo cáo thủ công", key=f"manual_btn_{selected_symbol}",
+                               help="Tạo báo cáo khi chưa có API key"):
+                        st.warning("⚠️ Cần OpenAI API Key để tạo báo cáo AI")
 
             form_text = (st.session_state.get("form_cache") or {}).get(selected_symbol)
             if form_text:
+                # Hiển thị header với mã và tên công ty
+                st.markdown(f"""
+                        📊 Phân tích kỹ thuật: {selected_symbol}
+                """, unsafe_allow_html=True)
+                
                 st.markdown(form_text)
                 st.download_button(
                     label="⬇️ Tải báo cáo (.txt)",
@@ -1281,6 +1803,64 @@ else:
                     file_name=f"{selected_symbol}_PTKT_{store['ed_str']}.txt",
                     mime="text/plain; charset=utf-8"
                 )
+                
+                # Auto-advance logic
+                auto_advance = st.session_state.get("auto_advance_symbols", False)
+                if auto_advance:
+                    top_syms = st.session_state.get("top_syms", [])
+                    current_symbol = selected_symbol
+                    
+                    # Kiểm tra xem tất cả các mã đã có báo cáo chưa
+                    cached_reports = st.session_state.get("form_cache", {})
+                    symbols_with_reports = [sym for sym in top_syms if sym in cached_reports]
+                    
+                    if len(symbols_with_reports) >= len(top_syms):
+                        st.success("🎉 Đã hoàn thành tạo báo cáo cho tất cả các mã trong danh sách!")
+                    elif current_symbol in top_syms:
+                        current_index = top_syms.index(current_symbol)
+                        
+                        # Tìm mã tiếp theo chưa có báo cáo
+                        next_symbol = None
+                        for i in range(current_index + 1, len(top_syms)):
+                            if top_syms[i] not in cached_reports:
+                                next_symbol = top_syms[i]
+                                break
+                        
+                        if next_symbol:
+                            # Chuyển đến mã tiếp theo sau 3 giây
+                            # Kiểm tra xem đã setup timer chưa
+                            timer_key = f"auto_advance_timer_{current_symbol}"
+                            if timer_key not in st.session_state:
+                                st.session_state[timer_key] = time.time()
+                                st.info(f"🔄 Sẽ tự động chuyển đến mã **{next_symbol}** sau 3 giây...")
+                                time.sleep(0.5)
+                                st.rerun()
+                            elif time.time() - st.session_state[timer_key] >= 3:
+                                # Đã đủ 3 giây, chuyển mã
+                                del st.session_state[timer_key]
+                                st.session_state["selected_symbol"] = next_symbol
+                                st.success(f"🏁 Đã chuyển sang mã **{next_symbol}**!")
+                                time.sleep(0.5)
+                                st.rerun()
+                            else:
+                                # Hiển thị đếm ngược
+                                remaining = 3 - (time.time() - st.session_state[timer_key])
+                                st.info(f"🔄 Chuyển đến mã **{next_symbol}** sau {remaining:.1f} giây...")
+                                time.sleep(0.5)
+                                st.rerun()
+                        else:
+                            st.success("� Đã hoàn thành tạo báo cáo cho tất cả các mã trong danh sách!")
+                    else:
+                        st.info("🏁 Mã hiện tại không trong danh sách phân tích!")
+                        
+            elif not api_key:
+                st.info("💡 **Để sử dụng tính năng báo cáo AI:**\n"
+                       "1. Nhập OpenAI API Key ở phần cấu hình bên trái\n"
+                       "2. Báo cáo sẽ được tự động tạo cho mỗi mã cổ phiếu\n"
+                       "3. Có thể tùy chỉnh template và prompt ở phần 'Cấu hình Prompt & Template AI'")
+            else:
+                if not has_report:
+                    st.info("🔄 Chưa có báo cáo cho mã này - chạy phân tích để tự động tạo")
 
             # ====== 📰 Công bố/hoạt động 7 ngày gần đây (TCBS) ======
             st.markdown("### 📰 Công bố trong 7 ngày gần đây (TCBS)")
