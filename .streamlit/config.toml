@@ -1,0 +1,24 @@
+[global]
+# Disable development mode warnings
+developmentMode = false
+showWarningOnDirectExecution = false
+
+[server]
+# Server configuration for better performance
+port = 8501
+enableCORS = true
+enableXsrfProtection = true
+maxUploadSize = 200
+enableWebsocketCompression = true
+
+[browser]
+# Browser configuration
+gatherUsageStats = false
+
+[theme]
+# Custom theme for professional appearance
+primaryColor = "#667eea"
+backgroundColor = "#ffffff"
+secondaryBackgroundColor = "#f8f9fa"
+textColor = "#262730"
+font = "sans serif"

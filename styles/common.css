@@ -1,0 +1,321 @@
+/* Common CSS styles for VN Stock AI Platform */
+
+/* Global Variables */
+:root {
+    --primary-color: #667eea;
+    --secondary-color: #764ba2;
+    --success-color: #28a745;
+    --warning-color: #ffc107;
+    --danger-color: #dc3545;
+    --info-color: #17a2b8;
+    --light-color: #f8f9fa;
+    --dark-color: #343a40;
+    --border-radius: 8px;
+    --box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    --transition: all 0.3s ease;
+}
+
+/* Main container styling */
+.main {
+    padding: 0 1rem;
+}
+
+/* Header styles */
+.main-header {
+    background: linear-gradient(90deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    padding: 2rem;
+    border-radius: 10px;
+    margin-bottom: 2rem;
+    color: white !important;
+    text-align: center;
+    box-shadow: var(--box-shadow);
+}
+
+.main-header h1, .main-header p {
+    color: white !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    margin: 0;
+}
+
+.main-title {
+    background: linear-gradient(90deg, #1e3c72 0%, #2a5298 100%);
+    color: white !important;
+    padding: 1.5rem;
+    border-radius: 10px;
+    text-align: center;
+    margin-bottom: 2rem;
+    box-shadow: var(--box-shadow);
+}
+
+.main-title h1, .main-title p {
+    color: white !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    margin: 0;
+}
+
+.forecast-header {
+    background: linear-gradient(90deg, var(--primary-color) 0%, var(--secondary-color) 100%);
+    color: white !important;
+    padding: 1.5rem;
+    border-radius: 10px;
+    text-align: center;
+    margin-bottom: 2rem;
+    box-shadow: var(--box-shadow);
+}
+
+.forecast-header h1, .forecast-header p {
+    color: white !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+    margin: 0;
+}
+
+/* Card components */
+.feature-card, .metric-card, .parameter-card, .forecast-section {
+    background: white;
+    padding: 1.5rem;
+    border-radius: 10px;
+    box-shadow: var(--box-shadow);
+    border-left: 4px solid var(--primary-color);
+    margin-bottom: 1rem;
+    transition: var(--transition);
+}
+
+.feature-card:hover, .metric-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 20px rgba(0,0,0,0.15);
+}
+
+.metric-card {
+    padding: 1rem;
+}
+
+.parameter-card {
+    background: var(--light-color);
+    border: 1px solid #e9ecef;
+}
+
+/* Control panels */
+.control-panel {
+    background: var(--light-color);
+    padding: 1.5rem;
+    border-radius: 10px;
+    border: 1px solid #e9ecef;
+    margin-bottom: 1rem;
+}
+
+/* Section headers */
+.section-header {
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    color: white !important;
+    padding: 1rem;
+    border-radius: var(--border-radius) var(--border-radius) 0 0;
+    margin-bottom: 0;
+    font-weight: 600;
+}
+
+.section-header h1, .section-header h2, .section-header h3, .section-header h4, .section-header h5 {
+    color: white !important;
+    text-shadow: 0 1px 3px rgba(0,0,0,0.3);
+    margin: 0;
+}
+
+/* Status indicators */
+.status-indicator {
+    height: 10px;
+    width: 10px;
+    border-radius: 50%;
+    display: inline-block;
+    margin-right: 0.5rem;
+}
+
+.status-success { background-color: var(--success-color); }
+.status-warning { background-color: var(--warning-color); }
+.status-error { background-color: var(--danger-color); }
+
+/* Model status messages */
+.model-status {
+    padding: 0.75rem;
+    border-radius: var(--border-radius);
+    margin: 1rem 0;
+    font-weight: 600;
+}
+
+.status-training { 
+    background: #fff3cd; 
+    color: #856404; 
+    border: 1px solid #ffeaa7; 
+}
+
+.status-success { 
+    background: #d4edda; 
+    color: #155724; 
+    border: 1px solid #c3e6cb; 
+}
+
+.status-error { 
+    background: #f8d7da; 
+    color: #721c24; 
+    border: 1px solid #f5c6cb; 
+}
+
+/* Score badges */
+.score-badge {
+    padding: 0.25rem 0.75rem;
+    border-radius: 15px;
+    color: white;
+    font-weight: bold;
+    font-size: 0.9rem;
+}
+
+.score-high { background: var(--success-color); }
+.score-medium { background: var(--warning-color); color: #000; }
+.score-low { background: var(--danger-color); }
+
+/* Metric displays */
+.metric-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    margin: 1rem 0;
+}
+
+.metric-box {
+    background: white;
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    box-shadow: var(--box-shadow);
+    text-align: center;
+    border-left: 4px solid var(--primary-color);
+    transition: var(--transition);
+}
+
+.metric-box:hover {
+    transform: translateY(-2px);
+}
+
+.stat-box {
+    text-align: center;
+    padding: 1rem;
+    background: var(--light-color);
+    border-radius: var(--border-radius);
+    min-width: 150px;
+    transition: var(--transition);
+}
+
+.stat-box:hover {
+    background: #e9ecef;
+}
+
+/* Navigation buttons */
+.nav-button {
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+    padding: 0.75rem 2rem;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: var(--transition);
+    width: 100%;
+    margin: 0.5rem 0;
+    cursor: pointer;
+}
+
+.nav-button:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 5px 15px rgba(102, 126, 234, 0.4);
+}
+
+/* Data tables */
+.data-table {
+    border-radius: var(--border-radius);
+    overflow: hidden;
+    box-shadow: var(--box-shadow);
+}
+
+/* Progress containers */
+.progress-container {
+    background: var(--light-color);
+    border-radius: 10px;
+    padding: 1rem;
+    margin: 1rem 0;
+}
+
+/* Sidebar styling */
+.sidebar-section {
+    background: var(--light-color);
+    padding: 1rem;
+    border-radius: var(--border-radius);
+    margin-bottom: 1rem;
+}
+
+/* Animation for loading states */
+@keyframes pulse {
+    0% { opacity: 1; }
+    50% { opacity: 0.5; }
+    100% { opacity: 1; }
+}
+
+.loading {
+    animation: pulse 1.5s ease-in-out infinite;
+}
+
+/* Responsive design */
+@media (max-width: 768px) {
+    .main-header, .main-title, .forecast-header {
+        padding: 1rem;
+        font-size: 0.9rem;
+    }
+    
+    .feature-card, .metric-card, .parameter-card {
+        padding: 1rem;
+    }
+    
+    .metric-grid {
+        grid-template-columns: 1fr;
+    }
+}
+
+/* Streamlit specific overrides */
+.stButton > button {
+    background: linear-gradient(45deg, var(--primary-color), var(--secondary-color));
+    color: white;
+    border: none;
+    border-radius: 25px;
+    font-weight: 600;
+    transition: var(--transition);
+}
+
+.stButton > button:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 3px 10px rgba(102, 126, 234, 0.3);
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: var(--light-color);
+}
+
+::-webkit-scrollbar-thumb {
+    background: var(--primary-color);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: var(--secondary-color);
+}
+
+/* Text selection */
+::selection {
+    background: var(--primary-color);
+    color: white;
+}
+
+/* Focus states */
+input:focus, textarea:focus, select:focus {
+    outline: 2px solid var(--primary-color);
+    outline-offset: 2px;
+}

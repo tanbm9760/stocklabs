@@ -1,0 +1,250 @@
+/* Advanced Streamlit UI Customizations */
+
+/* Hide Streamlit branding and unnecessary elements */
+#MainMenu {visibility: hidden;}
+footer {visibility: hidden;}
+header {visibility: hidden;}
+
+/* Custom header styling */
+.stApp > header {
+    background-color: transparent;
+}
+
+/* Sidebar enhancements */
+.css-1d391kg {
+    background: linear-gradient(180deg, #f8f9fa 0%, #e9ecef 100%);
+}
+
+.css-1lcbmhc {
+    padding-top: 1rem;
+}
+
+/* Main content area */
+.main .block-container {
+    padding-top: 1rem;
+    padding-bottom: 1rem;
+    max-width: 100%;
+}
+
+/* Button styling */
+.stButton > button {
+    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+    color: white !important;
+    border: none !important;
+    border-radius: 25px !important;
+    font-weight: 600 !important;
+    padding: 0.5rem 1.5rem !important;
+    transition: all 0.3s ease !important;
+    box-shadow: 0 2px 8px rgba(102, 126, 234, 0.3) !important;
+}
+
+.stButton > button:hover {
+    transform: translateY(-2px) !important;
+    box-shadow: 0 4px 15px rgba(102, 126, 234, 0.5) !important;
+}
+
+.stButton > button:active {
+    transform: translateY(0) !important;
+}
+
+/* Input field styling */
+.stTextInput > div > div > input,
+.stTextArea > div > div > textarea,
+.stSelectbox > div > div > select,
+.stNumberInput > div > div > input {
+    border-radius: 8px !important;
+    border: 2px solid #e9ecef !important;
+    transition: border-color 0.3s ease !important;
+}
+
+.stTextInput > div > div > input:focus,
+.stTextArea > div > div > textarea:focus,
+.stSelectbox > div > div > select:focus,
+.stNumberInput > div > div > input:focus {
+    border-color: #667eea !important;
+    box-shadow: 0 0 0 2px rgba(102, 126, 234, 0.2) !important;
+}
+
+/* Slider styling */
+.stSlider > div > div > div > div {
+    background: linear-gradient(90deg, #667eea, #764ba2) !important;
+}
+
+/* Metric styling */
+.metric-container {
+    background: white;
+    padding: 1rem;
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    border-left: 4px solid #667eea;
+}
+
+/* Dataframe styling */
+.stDataFrame {
+    border-radius: 8px !important;
+    overflow: hidden !important;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1) !important;
+}
+
+/* Tab styling */
+.stTabs [data-baseweb="tab-list"] {
+    gap: 8px;
+}
+
+.stTabs [data-baseweb="tab"] {
+    border-radius: 8px 8px 0 0;
+    background: #f8f9fa;
+    border: 1px solid #e9ecef;
+}
+
+.stTabs [aria-selected="true"] {
+    background: linear-gradient(45deg, #667eea, #764ba2) !important;
+    color: white !important;
+}
+
+/* Progress bar styling */
+.stProgress > div > div > div > div {
+    background: linear-gradient(90deg, #667eea, #764ba2) !important;
+}
+
+/* Success/Warning/Error message styling */
+.stSuccess {
+    background: #d4edda !important;
+    border: 1px solid #c3e6cb !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+}
+
+.stWarning {
+    background: #fff3cd !important;
+    border: 1px solid #ffeaa7 !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+}
+
+.stError {
+    background: #f8d7da !important;
+    border: 1px solid #f5c6cb !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+}
+
+.stInfo {
+    background: #d1ecf1 !important;
+    border: 1px solid #bee5eb !important;
+    border-radius: 8px !important;
+    padding: 1rem !important;
+}
+
+/* Chart container styling */
+.js-plotly-plot {
+    border-radius: 8px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.1);
+    overflow: hidden;
+}
+
+/* Sidebar logo area */
+.css-1v0mbdj img {
+    border-radius: 8px;
+}
+
+/* Hide hamburger menu in deployment */
+.css-14xtw13.e8zbici0 {
+    display: none;
+}
+
+/* Custom scrollbar */
+::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+}
+
+::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb {
+    background: linear-gradient(180deg, #667eea, #764ba2);
+    border-radius: 4px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+    background: #5a6fd8;
+}
+
+/* Loading spinner customization */
+.stSpinner > div {
+    border-top-color: #667eea !important;
+}
+
+/* Expander styling */
+.streamlit-expanderHeader {
+    background: #f8f9fa;
+    border-radius: 8px;
+    border: 1px solid #e9ecef;
+}
+
+/* Caption styling */
+.caption {
+    color: #6c757d;
+    font-size: 0.875rem;
+}
+
+/* Typography improvements */
+.stMarkdown h1, .stMarkdown h2, .stMarkdown h3 {
+    color: #2c3e50 !important;
+}
+
+.stMarkdown p {
+    color: #495057 !important;
+    line-height: 1.6 !important;
+}
+
+/* Ensure white text on gradient backgrounds */
+.main-header, .main-title, .forecast-header, .section-header {
+    color: white !important;
+}
+
+.main-header h1, .main-header p,
+.main-title h1, .main-title p,
+.forecast-header h1, .forecast-header p,
+.section-header h1, .section-header h2, .section-header h3, .section-header h4, .section-header h5 {
+    color: white !important;
+    text-shadow: 0 2px 4px rgba(0,0,0,0.3) !important;
+    margin: 0 !important;
+}
+
+/* Override any inherited dark colors on gradient backgrounds */
+.main-header *, .main-title *, .forecast-header *, .section-header * {
+    color: white !important;
+}
+
+/* Custom animations */
+@keyframes slideIn {
+    from {
+        opacity: 0;
+        transform: translateY(20px);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0);
+    }
+}
+
+.slide-in {
+    animation: slideIn 0.5s ease-out;
+}
+
+/* Mobile responsiveness */
+@media (max-width: 768px) {
+    .main .block-container {
+        padding-left: 1rem;
+        padding-right: 1rem;
+    }
+    
+    .stButton > button {
+        width: 100%;
+        margin-bottom: 0.5rem;
+    }
+}
