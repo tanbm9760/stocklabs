@@ -628,41 +628,51 @@ with st.sidebar:
     if st.session_state.current_watchlist not in wl_names:
         wl_names = (wl_names + [st.session_state.current_watchlist]) if st.session_state.current_watchlist else wl_names
     
-    selected_wl = st.selectbox(
-        "📂 Chọn danh sách", 
-        options=wl_names, 
-        index=wl_names.index(st.session_state.current_watchlist),
-        help="Chọn danh sách cổ phiếu để phân tích"
+
+    # Đưa phần chọn danh sách đang phân tích lên đầu
+    st.session_state.current_watchlist = st.selectbox(
+        "🎯 Đang phân tích danh sách",
+        options=sorted(st.session_state.watchlists.keys()),
+        index=sorted(st.session_state.watchlists.keys()).index(st.session_state.current_watchlist),
+        key="active_watchlist_picker",
+        help="Danh sách này sẽ được sử dụng để phân tích khi nhấn nút Phân tích"
     )
-    
+
+    selected_wl = st.session_state.current_watchlist
+
+    # Chọn danh sách để thao tác (ẩn label)
+    wl_names = sorted(st.session_state.watchlists.keys())
     new_wl_name = st.text_input(
-        "📝 Tên danh sách mới", 
+        label="",
         value="",
-        placeholder="Ví dụ: Tech Stocks",
+        placeholder="Tên danh sách mới",
+        key="new_wl_name_input",
+        label_visibility="collapsed",
         help="Nhập tên để tạo danh sách mới"
     )
 
-    # Ô text chỉnh mã cho watchlist đang chọn
+    # Ô text chỉnh mã cho watchlist đang chọn (ẩn label)
     current_symbols_str = ", ".join(st.session_state.watchlists.get(selected_wl, []))
     edited_symbols_str = st.text_area(
-        "📊 Mã cổ phiếu (phân cách bằng dấu phẩy)",
+        label="",
         value=current_symbols_str,
         key=f"wl_text_{selected_wl}",
+        label_visibility="collapsed",
         help="Ví dụ: FPT, VNM, HPG, SSI (chỉ chấp nhận mã 3 ký tự)",
         height=100
     )
 
     st.markdown("</div>", unsafe_allow_html=True)
 
-    # Action buttons with better styling
+    # Action buttons chỉ hiện icon
     col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
     with col_btn1:
-        if st.button("💾 Lưu", use_container_width=True):
+        if st.button("", use_container_width=True, help="Lưu danh sách", key="save_btn", type="secondary", icon="💾"):
             cleaned = _filter_company_tickers_only(_parse_symbols_input(edited_symbols_str))
             st.session_state.watchlists[selected_wl] = cleaned
             st.success(f"✅ Đã lưu '{selected_wl}' ({len(cleaned)} mã)")
     with col_btn2:
-        if st.button("➕ Tạo", use_container_width=True):
+        if st.button("", use_container_width=True, help="Tạo danh sách mới", key="create_btn", type="secondary", icon="➕"):
             name = (new_wl_name or "").strip()
             if not name:
                 st.warning("⚠️ Vui lòng nhập tên danh sách")
@@ -674,7 +684,7 @@ with st.sidebar:
                 st.session_state.current_watchlist = name
                 st.success(f"✅ Đã tạo '{name}' ({len(cleaned)} mã)")
     with col_btn3:
-        if st.button("🗑️ Xóa", use_container_width=True):
+        if st.button("", use_container_width=True, help="Xóa danh sách", key="delete_btn", type="secondary", icon="🗑️"):
             if selected_wl in st.session_state.watchlists:
                 if len(st.session_state.watchlists) <= 1:
                     st.warning("⚠️ Cần ít nhất 1 danh sách")
@@ -682,15 +692,6 @@ with st.sidebar:
                     del st.session_state.watchlists[selected_wl]
                     st.session_state.current_watchlist = next(iter(st.session_state.watchlists.keys()))
                     st.success(f"✅ Đã xóa '{selected_wl}'")
-
-    # Cập nhật watchlist đang dùng
-    st.session_state.current_watchlist = st.selectbox(
-        "🎯 Đang phân tích danh sách",
-        options=sorted(st.session_state.watchlists.keys()),
-        index=sorted(st.session_state.watchlists.keys()).index(st.session_state.current_watchlist),
-        key="active_watchlist_picker",
-        help="Danh sách này sẽ được sử dụng để phân tích khi nhấn nút Phân tích"
-    )
 
 # =========================
 # MAIN CONTENT - Quick Analysis Section
