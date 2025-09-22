@@ -51,14 +51,14 @@ except Exception:
 # =========================
 # Page config & Styling
 # =========================
-set_page_config("📊 Stock Screener", "📊")
+set_page_config("FinStock", "📊")
 apply_theme()
 load_css()
 
 st.markdown("""
 <div class="main-title">
-    <h1 style="color: white !important; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">📊 Stock Screener</h1>
-    <p style="color: white !important; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Công cụ sàng lọc và chấm điểm cổ phiếu chuyên nghiệp</p>
+    <h1 style="color: white !important; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">📊 FinStock</h1>
+    <p style="color: white !important; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">Công cụ sàng lọc và chấm điểm cổ phiếu</p>
 </div>
 """, unsafe_allow_html=True)
 
@@ -351,8 +351,14 @@ def make_ohlcv_figure(
     ))
 
     x_end = df["date"].max()
+    x_max_limit = x_end + pd.DateOffset(months=1)  # Giới hạn tối đa +1 tháng từ ngày cuối
     x_pad = x_end + pd.DateOffset(months=int(right_pad_months))
     x_start = x_end - pd.DateOffset(months=int(default_months_view))
+    
+    # Tính toán các mốc thời gian từ ngày cuối dữ liệu
+    x_1m_start = x_end - pd.DateOffset(months=1)
+    x_3m_start = x_end - pd.DateOffset(months=3)
+    x_6m_start = x_end - pd.DateOffset(months=6)
 
     v = pd.to_numeric(df["volume"], errors="coerce").dropna()
     y2_max = None
@@ -365,9 +371,10 @@ def make_ohlcv_figure(
 
     fig.update_layout(
         xaxis=dict(
-            range=[x_start, x_pad],
+            range=[x_start, x_end],  # Set range to end at last data date
             rangebreaks=[dict(bounds=["sat","mon"]), dict(values=missing_vals)],
-            rangeslider=dict(visible=True, range=[df["date"].min(), x_pad],
+            rangeslider=dict(visible=True, 
+                             range=[df["date"].min(), x_max_limit],  # Giới hạn tối đa +1 tháng
                              thickness=0.12, bgcolor="#0f172a", bordercolor="#334155"),
             rangeselector=dict(
                 y=0, yanchor="bottom", x=0.5, xanchor="center",
@@ -386,6 +393,7 @@ def make_ohlcv_figure(
             domain=[vol_frac + gap, 1.0],
             autorange=True,  # Tự động scale theo dữ liệu hiển thị
             fixedrange=False,  # Cho phép zoom/pan trục Y
+            side="right",  # Đặt trục giá bên phải
             showline=True, linewidth=1, linecolor=axis, gridcolor=grid, zeroline=False
         ),
         yaxis2=dict(
@@ -393,11 +401,12 @@ def make_ohlcv_figure(
             rangemode="tozero", 
             autorange=True,  # Tự động scale cho trục volume
             fixedrange=False,  # Cho phép zoom/pan trục Y volume 
+            side="right",  # Đặt trục khối lượng bên phải
             tickformat="~s",
             showline=True, linewidth=1, linecolor=axis, gridcolor=grid, zeroline=False
         ),
         legend=dict(
-            x=0.995, y=0.995, xanchor="right", yanchor="top",
+            x=0.005, y=0.995, xanchor="left", yanchor="top",
             bgcolor="rgba(15,23,42,0.65)", bordercolor="#334155", borderwidth=1,
             font=dict(color=font, size=11),
             orientation="v",
@@ -412,7 +421,7 @@ def make_ohlcv_figure(
         hoverlabel=dict(bgcolor="#0f172a", font_color=font, bordercolor=axis),
         height=height,
         # Thêm cấu hình để tối ưu hóa tương tác
-        dragmode="zoom",  # Cho phép zoom khi kéo
+        dragmode="pan",  # Mặc định là pan (kéo để di chuyển biểu đồ)
         selectdirection="h",  # Chỉ zoom theo chiều ngang (h = horizontal)
         # Thêm scroll zoom để có thể zoom bằng cuộn chuột
         xaxis_fixedrange=False,  # Cho phép zoom trục X
@@ -614,7 +623,7 @@ def call_llm_structured_report(api_key: str, model: str, symbol: str, tech_stats
         "- 'Đường MA' nêu hướng (lên/xuống/đi ngang) + vai trò (hỗ trợ/kháng cự) theo độ dốc & vị trí giá.\n"
         "- 'Khối lượng' so sánh trung bình 20 vs 60 phiên.\n"
         "- 'Hỗ trợ & Kháng cự' dựa pivot gần nhất, MA và 52W.\n"
-        "- 'Lướt sóng/Trung hạn' có vùng mua tham khảo, stoploss (~1–1.5×ATR%), mục tiêu theo kháng cự/đỉnh cũ.\n"
+        "- 'Lướt sóng/Trung hạn' có vùng mua tham khảo, stoploss, mục tiêu theo kháng cự/đỉnh cũ.\n"
         "- Định dạng số có **dấu phẩy** (vd 31,000). Không coi đây là khuyến nghị đầu tư."
     )
     
@@ -644,23 +653,44 @@ def call_llm_structured_report(api_key: str, model: str, symbol: str, tech_stats
 # Enhanced Sidebar - Simplified
 # =========================
 with st.sidebar:
-    st.markdown("""
-    <div class="section-header">
-        <h3>🗂️ Quản lý Watchlists</h3>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    st.markdown("""
-    <div class="control-panel" style="margin-top: 0;">
-    """, unsafe_allow_html=True)
-
     # --- Khởi tạo state ---
     if "watchlists" not in st.session_state:
-        # Mặc định vài ví dụ. Bạn có thể sửa/đổi tên/đổi mã trực tiếp.
+        # Danh sách mẫu theo ngành với các cổ phiếu vốn hóa lớn nhất
         st.session_state.watchlists = {
             "My Picks": ["FPT", "VNM", "HPG", "MWG", "SSI", "VCB"],
-            "Banking": ["VCB", "CTG", "BID", "TCB", "VPB", "MBB", "TPB", "ACB", "STB", "EIB", "SHB"],
-            "Bluechips": ["VIC", "VHM", "VRE", "VNM", "SAB", "PLX", "GAS", "FPT", "MWG", "HPG", "SSI", "VCB"],
+            
+            # Ngân hàng (Top 10 theo vốn hóa)
+            "🏦 Ngân hàng": ["VCB", "BID", "CTG", "TCB", "VPB", "MBB", "ACB", "TPB", "STB", "SHB"],
+            
+            # Chứng khoán (Top 10)
+            "📈 Chứng khoán": ["SSI", "VND", "HCM", "VCI", "MBS", "CTS", "VIX", "FTS", "BSI", "AGR"],
+            
+            # Bất động sản (Top 10)
+            "🏢 Bất động sản": ["VIC", "VHM", "VRE", "NVL", "PDR", "KDH", "DXG", "BCM", "NLG", "HDG"],
+            
+            # Dầu khí (Top 10)
+            "⛽ Dầu khí": ["GAS", "PLX", "PVD", "PVC", "PVS", "PVB", "PSH", "PVT", "BSR", "OIL"],
+            
+            # Thép (Top 10)
+            "🔩 Thép": ["HPG", "HSG", "NKG", "SMC", "TLH", "VGS", "TVN", "KSS", "VCA", "DTL"],
+            
+            # Công nghệ (Top 10)
+            "💻 Công nghệ": ["FPT", "CMG", "CTR", "ELC", "VGI", "ITD", "DST", "VCS", "ICT", "IDC"],
+            
+            # Bán lẻ (Top 10)
+            "🛒 Bán lẻ": ["MWG", "PNJ", "FRT", "MBB", "CTF", "VRE", "DGW", "AST", "SBT", "VGC"],
+            
+            # Thực phẩm & Đồ uống (Top 10)
+            "🍺 Thực phẩm": ["VNM", "SAB", "MSN", "MCH", "KDC", "VHC", "CII", "QNS", "LSS", "TAC"],
+            
+            # Điện (Top 10)
+            "⚡ Điện": ["POW", "GEG", "PC1", "NT2", "REE", "VSH", "SBA", "HND", "EVE", "BWE"],
+            
+            # Hàng không & Vận tải (Top 10)
+            "✈️ Vận tải": ["HVN", "VJC", "GMD", "VOS", "STG", "MVN", "PVT", "TCO", "VSC", "VIP"],
+            
+            # Bluechips tổng hợp
+            "⭐ Bluechips": ["VIC", "VHM", "VCB", "BID", "VNM", "SAB", "GAS", "PLX", "FPT", "HPG", "MWG", "SSI"],
         }
     if "current_watchlist" not in st.session_state:
         st.session_state.current_watchlist = "My Picks"
@@ -675,74 +705,122 @@ with st.sidebar:
     </div>
     """, unsafe_allow_html=True)
 
-    wl_names = sorted(st.session_state.watchlists.keys())
-    if st.session_state.current_watchlist not in wl_names:
-        wl_names = (wl_names + [st.session_state.current_watchlist]) if st.session_state.current_watchlist else wl_names
+    # =========================
+    # PHẦN 1: CHỌN DANH SÁCH PHÂN TÍCH
+    # =========================
+    st.markdown("""
+    <div class="section-header">
+        <h4>🎯 Chọn danh sách phân tích</h4>
+    </div>
+    """, unsafe_allow_html=True)
+
+    # Callback function cho selectbox
+    def update_current_watchlist():
+        """Callback function khi selectbox thay đổi"""
+        new_selection = st.session_state.active_watchlist_picker
+        if new_selection != st.session_state.current_watchlist:
+            st.session_state.current_watchlist = new_selection
+            # Clear cached AI reports khi thay đổi watchlist
+            if 'ai_reports' in st.session_state:
+                st.session_state.ai_reports = {}
+
+    # Tính toán options một lần và đảm bảo consistency
+    available_watchlists = sorted(st.session_state.watchlists.keys())
     
-
-    # Đưa phần chọn danh sách đang phân tích lên đầu
-    st.session_state.current_watchlist = st.selectbox(
-        "🎯 Đang phân tích danh sách",
-        options=sorted(st.session_state.watchlists.keys()),
-        index=sorted(st.session_state.watchlists.keys()).index(st.session_state.current_watchlist),
+    # Đảm bảo current_watchlist hợp lệ
+    if st.session_state.current_watchlist not in available_watchlists:
+        st.session_state.current_watchlist = available_watchlists[0] if available_watchlists else "My Picks"
+    
+    # Tính index an toàn
+    try:
+        default_index = available_watchlists.index(st.session_state.current_watchlist)
+    except ValueError:
+        default_index = 0
+        st.session_state.current_watchlist = available_watchlists[0] if available_watchlists else "My Picks"
+    
+    # Selectbox with callback - không cần gán trực tiếp
+    st.selectbox(
+        "Danh sách để phân tích:",
+        options=available_watchlists,
+        index=default_index,
         key="active_watchlist_picker",
-        help="Danh sách này sẽ được sử dụng để phân tích khi nhấn nút Phân tích"
+        help="Danh sách này sẽ được sử dụng để phân tích khi nhấn nút Phân tích",
+        on_change=update_current_watchlist
     )
 
-    selected_wl = st.session_state.current_watchlist
+    # Hiển thị các mã trong danh sách được chọn
+    current_symbols = st.session_state.watchlists.get(st.session_state.current_watchlist, [])
+    if current_symbols:
+        st.info(f"📊 **{len(current_symbols)} mã cổ phiếu**: {', '.join(current_symbols)}")
+    else:
+        st.warning("⚠️ Danh sách trống")
 
-    # Chọn danh sách để thao tác (ẩn label)
-    wl_names = sorted(st.session_state.watchlists.keys())
-    new_wl_name = st.text_input(
-        label="",
-        value="",
-        placeholder="Tên danh sách mới",
-        key="new_wl_name_input",
-        label_visibility="collapsed",
-        help="Nhập tên để tạo danh sách mới"
-    )
+    # =========================
+    # PHẦN 2: CẤU HÌNH DANH SÁCH
+    # =========================
+    with st.expander("⚙️ Cấu hình danh sách", expanded=False):
+        st.markdown("""
+        <div class="control-panel" style="margin-top: 0;">
+        """, unsafe_allow_html=True)
 
-    # Ô text chỉnh mã cho watchlist đang chọn (ẩn label)
-    current_symbols_str = ", ".join(st.session_state.watchlists.get(selected_wl, []))
-    edited_symbols_str = st.text_area(
-        label="",
-        value=current_symbols_str,
-        key=f"wl_text_{selected_wl}",
-        label_visibility="collapsed",
-        help="Ví dụ: FPT, VNM, HPG, SSI (chỉ chấp nhận mã 3 ký tự)",
-        height=100
-    )
+        # Selectbox cho cấu hình - không liên quan đến current_watchlist
+        selected_wl = st.selectbox(
+            "Chọn danh sách để chỉnh sửa:",
+            options=available_watchlists,  # Sử dụng cùng list đã sort
+            key="config_watchlist_picker",
+            help="Chọn danh sách muốn chỉnh sửa (độc lập với danh sách phân tích)"
+        )
 
-    st.markdown("</div>", unsafe_allow_html=True)
+        new_wl_name = st.text_input(
+            "Tên danh sách mới:",
+            value="",
+            placeholder="Nhập tên để tạo danh sách mới",
+            key="new_wl_name_input",
+            help="Nhập tên để tạo danh sách mới"
+        )
 
-    # Action buttons chỉ hiện icon
-    col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
-    with col_btn1:
-        if st.button("", use_container_width=True, help="Lưu danh sách", key="save_btn", type="secondary", icon="💾"):
-            cleaned = _filter_company_tickers_only(_parse_symbols_input(edited_symbols_str))
-            st.session_state.watchlists[selected_wl] = cleaned
-            st.success(f"✅ Đã lưu '{selected_wl}' ({len(cleaned)} mã)")
-    with col_btn2:
-        if st.button("", use_container_width=True, help="Tạo danh sách mới", key="create_btn", type="secondary", icon="➕"):
-            name = (new_wl_name or "").strip()
-            if not name:
-                st.warning("⚠️ Vui lòng nhập tên danh sách")
-            elif name in st.session_state.watchlists:
-                st.warning("⚠️ Tên đã tồn tại")
-            else:
+        # Ô text chỉnh mã cho watchlist đang chọn
+        current_symbols_str = ", ".join(st.session_state.watchlists.get(selected_wl, []))
+        edited_symbols_str = st.text_area(
+            f"Danh sách mã cổ phiếu cho '{selected_wl}':",
+            value=current_symbols_str,
+            key=f"wl_text_{selected_wl}",
+            help="Ví dụ: FPT, VNM, HPG, SSI (chỉ chấp nhận mã 3 ký tự)",
+            height=100
+        )
+
+        st.markdown("</div>", unsafe_allow_html=True)
+
+        # Action buttons
+        col_btn1, col_btn2, col_btn3 = st.columns([1, 1, 1])
+        with col_btn1:
+            if st.button("💾 Lưu", use_container_width=True, help="Lưu thay đổi danh sách", key="save_btn", type="primary"):
                 cleaned = _filter_company_tickers_only(_parse_symbols_input(edited_symbols_str))
-                st.session_state.watchlists[name] = cleaned
-                st.session_state.current_watchlist = name
-                st.success(f"✅ Đã tạo '{name}' ({len(cleaned)} mã)")
-    with col_btn3:
-        if st.button("", use_container_width=True, help="Xóa danh sách", key="delete_btn", type="secondary", icon="🗑️"):
-            if selected_wl in st.session_state.watchlists:
-                if len(st.session_state.watchlists) <= 1:
-                    st.warning("⚠️ Cần ít nhất 1 danh sách")
+                st.session_state.watchlists[selected_wl] = cleaned
+                st.success(f"✅ Đã lưu '{selected_wl}' ({len(cleaned)} mã)")
+        with col_btn2:
+            if st.button("➕ Tạo mới", use_container_width=True, help="Tạo danh sách mới", key="create_btn", type="secondary"):
+                name = (new_wl_name or "").strip()
+                if not name:
+                    st.warning("⚠️ Vui lòng nhập tên danh sách")
+                elif name in st.session_state.watchlists:
+                    st.warning("⚠️ Tên đã tồn tại")
                 else:
-                    del st.session_state.watchlists[selected_wl]
-                    st.session_state.current_watchlist = next(iter(st.session_state.watchlists.keys()))
-                    st.success(f"✅ Đã xóa '{selected_wl}'")
+                    cleaned = _filter_company_tickers_only(_parse_symbols_input(edited_symbols_str))
+                    st.session_state.watchlists[name] = cleaned
+                    st.session_state.current_watchlist = name
+                    st.success(f"✅ Đã tạo '{name}' ({len(cleaned)} mã)")
+                    st.rerun()
+        with col_btn3:
+            if st.button("🗑️ Xóa", use_container_width=True, help="Xóa danh sách", key="delete_btn", type="secondary"):
+                if selected_wl in st.session_state.watchlists:
+                    if len(st.session_state.watchlists) <= 1:
+                        st.warning("⚠️ Cần ít nhất 1 danh sách")
+                    else:
+                        del st.session_state.watchlists[selected_wl]
+                        st.session_state.current_watchlist = next(iter(st.session_state.watchlists.keys()))
+                        st.success(f"✅ Đã xóa '{selected_wl}'")
+                        st.rerun()
     
     # =========================
     # AI Reports Management
@@ -819,13 +897,30 @@ with col_main1:
     """, unsafe_allow_html=True)
 
 with col_main2:
-    # Nút phân tích chính
-    analyze_btn = st.button(
-        "🚀 Bắt đầu phân tích", 
-        use_container_width=True,
-        type="primary",
-        help="Nhấn để bắt đầu phân tích các cổ phiếu trong danh sách"
+    # OpenAI API Key input
+    st.markdown("**🔑 OpenAI API Key**")
+    api_key_default = st.session_state.get("openai_api_key", "")
+    api_key_input = st.text_input(
+        "Nhập API key để sử dụng AI:", 
+        value=api_key_default, 
+        type="password",
+        placeholder="sk-...",
+        help="API key để tạo báo cáo phân tích bằng AI",
+        label_visibility="collapsed"
     )
+    if api_key_input:
+        st.session_state["openai_api_key"] = api_key_input
+    
+    # Mặc định sử dụng gpt-4o-mini
+    st.session_state["llm_model"] = "gpt-4o-mini"
+    
+# Nút phân tích chính
+analyze_btn = st.button(
+    "🚀 Bắt đầu phân tích", 
+    use_container_width=True,
+    type="primary",
+    help="Nhấn để bắt đầu phân tích các cổ phiếu trong danh sách"
+)
 
 # Advanced Configuration (có thể ẩn/hiện)
 with st.expander("⚙️ Cấu hình nâng cao", expanded=False):
@@ -854,21 +949,6 @@ with st.expander("⚙️ Cấu hình nâng cao", expanded=False):
 
     with col_config2:
         st.markdown("**🤖 Cấu hình AI**")
-        api_key_default = st.session_state.get("openai_api_key", "")
-        api_key_input = st.text_input(
-            "🔑 OpenAI API Key", 
-            value=api_key_default, 
-            type="password",
-            help="API key để tạo báo cáo phân tích bằng AI"
-        )
-        if api_key_input:
-            st.session_state["openai_api_key"] = api_key_input
-        
-        llm_model = st.text_input(
-            "🧠 Model AI", 
-            value="gpt-4o-mini",
-            help="Mô hình AI để tạo báo cáo"
-        )
         
         polite_delay_ms = st.slider(
             "⏱️ Độ trễ API (ms)", 
@@ -923,7 +1003,7 @@ with st.expander("📝 Cấu hình Prompt & Template AI", expanded=False):
             "- 'Đường MA' nêu hướng (lên/xuống/đi ngang) + vai trò (hỗ trợ/kháng cự) theo độ dốc & vị trí giá.\n"
             "- 'Khối lượng' so sánh trung bình 20 vs 60 phiên.\n"
             "- 'Hỗ trợ & Kháng cự' dựa pivot gần nhất, MA và 52W.\n"
-            "- 'Lướt sóng/Trung hạn' có vùng mua tham khảo, stoploss (~1–1.5×ATR%), mục tiêu theo kháng cự/đỉnh cũ.\n"
+            "- 'Lướt sóng/Trung hạn' có vùng mua tham khảo, stoploss, mục tiêu theo kháng cự/đỉnh cũ.\n"
             "- Định dạng số có **dấu phẩy** (vd 31,000). Không coi đây là khuyến nghị đầu tư."
         )
         
@@ -1255,7 +1335,7 @@ store = st.session_state.get("screener_store")
 if store is None:
     st.markdown("""
     <div class="metric-card" style="text-align: center; padding: 2rem;">
-        <h4>👋 Chào mừng đến với Stock Screener</h4>
+        <h4>👋 Chào mừng đến với FinStock </h4>
         <p>Vui lòng chọn danh sách cổ phiếu trong sidebar và nhấn nút <strong>🚀 Bắt đầu phân tích</strong> để bắt đầu.</p>
         <br>
         <div class="status-indicator status-warning"></div>
@@ -1275,35 +1355,17 @@ else:
     </div>
     """, unsafe_allow_html=True)
     
-    # Summary cards
-    col1, col2, col3 = st.columns(3)
-    with col1:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>📊 Tổng số mã</h4>
-            <h2 style="color: #2a5298;">{total_analyzed}</h2>
-            <small>Cổ phiếu đã phân tích</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col2:
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>🥇 Top performer</h4>
-            <h2 style="color: #28a745;">{top_performer}</h2>
-            <small>Cổ phiếu tốt nhất</small>
-        </div>
-        """, unsafe_allow_html=True)
-    
-    with col3:
-        analyzed_date = store.get('ed_str', 'N/A')
-        st.markdown(f"""
-        <div class="metric-card">
-            <h4>📅 Ngày phân tích</h4>
-            <h2 style="color: #2a5298; font-size: 1.2rem;">{analyzed_date}</h2>
-            <small>Dữ liệu đến ngày</small>
-        </div>
-        """, unsafe_allow_html=True)
+    # Kết quả phân tích gom gọn trong 1 dòng
+    analyzed_date = store.get('ed_str', 'N/A')
+    st.markdown(f"""
+    <div style="background: linear-gradient(90deg, #f8f9fa 0%, #e9ecef 100%); padding: 0.8rem 1.2rem; border-radius: 8px; border-left: 4px solid #2a5298; margin-bottom: 1rem;">
+        <p style="margin: 0; font-size: 1rem; color: #495057;">
+            <strong>📊 {total_analyzed}</strong> mã cổ phiếu đã phân tích • 
+            <strong style="color: #28a745;">🥇 {top_performer}</strong> dẫn đầu • 
+            <strong>📅 {analyzed_date}</strong>
+        </p>
+    </div>
+    """, unsafe_allow_html=True)
 
     st.markdown("<br>", unsafe_allow_html=True)
     
@@ -1357,17 +1419,18 @@ else:
         else:  # Nhỏ hơn → hiển thị nguyên giá trị
             view["adtv"] = view[adtv_col].apply(lambda x: "N/A" if pd.isna(x) or x <= 0 else f"{x:.2f}")
 
-    # Thêm cột AI Report status
-    cached_reports = st.session_state.get("form_cache", {})
-    view["ai_status"] = view.index.map(lambda x: "✅ Có" if x in cached_reports else "⏳ Chưa")
+    # Thêm cột STT mới (đánh số từ 1)
+    view.reset_index(drop=True, inplace=True)
+    view["stt"] = range(1, len(view) + 1)
 
     cols = [c for c in [
-        "symbol","score","Value","Quality","Growth","Momentum","Liquidity","RiskAdj","ai_status",
+        "stt","symbol","score","Value","Quality","Growth","Momentum","Liquidity","RiskAdj",
         "m1","m3","m6","pe","pb","roe","rev_yoy","eps_yoy","net_margin","adtv"
     ] if c in view.columns]
 
     # ---- Column help / tooltips ----
     col_help = {
+        "stt": "Số thứ tự xếp hạng dựa trên điểm tổng.",
         "symbol": "Mã cổ phiếu.",
         "score": "Điểm tổng hợp theo trọng số: Value(0.22), Quality(0.22), Growth(0.20), Momentum(0.20), Liquidity(0.10), Risk(0.06). Điểm cao = cân bằng hấp dẫn.",
         "Value": "Định giá tương đối (P/E, P/B). Cao → rẻ tương đối sau khi so sánh với nhóm ngành/toàn thị trường",
@@ -1376,7 +1439,6 @@ else:
         "Momentum": "Xu hướng giá (1–3–6 tháng). Dương/tốt → điểm cao.",
         "Liquidity": "Thanh khoản (ADTV). Cao dễ giao dịch.",
         "RiskAdj": "Điểm rủi ro điều chỉnh theo biến động (vol thấp được cộng điểm).",
-        "ai_status": "Trạng thái báo cáo AI. ✅ = Đã có báo cáo, ⏳ = Chưa có.",
         "m1": "Hiệu suất ~1 tháng (%). Dương → tăng. Âm → giảm",
         "m3": "Hiệu suất ~3 tháng (%). Dương → tăng. Âm → giảm",
         "m6": "Hiệu suất ~6 tháng (%). Dương → tăng. Âm → giảm",
@@ -1391,6 +1453,7 @@ else:
     }
     from streamlit import column_config as cc
     column_config = {
+        "stt": cc.NumberColumn("STT", help=col_help["stt"], width="small", format="%d"),
         "symbol": cc.TextColumn("Mã CP", help=col_help["symbol"]),
         "score": cc.TextColumn("Điểm tổng", help=col_help["score"]),
         "Value": cc.TextColumn("Định giá", help=col_help["Value"]),
@@ -1399,7 +1462,6 @@ else:
         "Momentum": cc.TextColumn("Xu hướng", help=col_help["Momentum"]),
         "Liquidity": cc.TextColumn("Thanh khoản", help=col_help["Liquidity"]),
         "RiskAdj": cc.TextColumn("Rủi ro", help=col_help["RiskAdj"]),
-        "ai_status": cc.TextColumn("AI Report", help=col_help["ai_status"]),
         "m1": cc.TextColumn("1 tháng (%)", help=col_help["m1"]),
         "m3": cc.TextColumn("3 tháng (%)", help=col_help["m3"]),
         "m6": cc.TextColumn("6 tháng (%)", help=col_help["m6"]),
@@ -1417,24 +1479,24 @@ else:
         view[cols],
         use_container_width=True,
         height=380,
-        column_config=column_config
+        column_config=column_config,
+        hide_index=True
     )
     st.caption("Mẹo: Di chuột vào biểu tượng ⓘ cạnh tiêu đề cột để xem chú thích nhanh.")
 
     # Ghi chú nhanh về Z-Score
-    with st.expander("ℹ️ Ghi chú nhanh về phương pháp Z-Score sử dụng trong bảng"):
+    with st.expander("📚 Phương pháp Z-Score"):
         st.markdown(
             """
-- **Mục tiêu**: đưa các thước đo khác đơn vị (P/E, % tăng trưởng, ADTV, biến động…) về cùng thang **chuẩn hoá** để cộng/trừ công bằng.
-- **Chuẩn hoá theo ngành** (*sector-neutral*): so sánh doanh nghiệp **trong cùng ngành** trước khi tổng hợp để tránh méo do đặc thù ngành.
-- **Kỹ thuật**:
-  - Cắt đuôi nhẹ outlier (*winsorize* 2%); với thước đo lệch phải (ADTV, vol) dùng `log1p`.
-  - Điền thiếu theo **trung vị ngành**, sau đó **trung vị toàn thị trường** nếu vẫn thiếu.
-  - Dùng **robust z-score**: \\( (x - \\text{median}) / (1.4826 \\times \\text{MAD}) \\) — bền vững với outlier.
-  - Các chỉ tiêu “**càng thấp càng tốt**” (P/E, P/B, D/E, volatility) được **đảo dấu** để điểm cao = tốt.
+- **Z-Score là gì?**: Phương pháp "chấm điểm" để so sánh các chỉ số khác nhau của cổ phiếu một cách công bằng.
+- **Tại sao cần Z-Score?**: VD: Làm sao so sánh P/E=15 lần vs Tăng trưởng=20% vs ADTV=10 tỷ? Z-Score đưa tất cả về cùng thang điểm.
+- **Cách tính**: Z = (Giá trị cổ phiếu - Trung bình nhóm) / Độ lệch chuẩn. Kết quả: Z=0 (trung bình), Z=+1 (tốt hơn 68% nhóm), Z=+2 (tốt hơn 95% nhóm).
+- **Điểm tổng hợp**: Score = Trung bình có trọng số của 6 nhóm: Value(22%), Quality(22%), Growth(20%), Momentum(20%), Liquidity(10%), Risk(6%).
+  - Các chỉ tiêu “**càng thấp càng tốt**” (P/E, P/B, D/E) được **đảo dấu** để điểm cao = tốt.
 - **Giải thích điểm**:
   - Z ≈ **0**: ngang trung vị nhóm so sánh; **+1**: tốt hơn đáng kể; **−1**: kém hơn đáng kể.
   - **score** = tổng hợp có trọng số: **Value(0.22)**, **Quality(0.22)**, **Growth(0.20)**, **Momentum(0.20)**, **Liquidity(0.10)**, **Risk(0.06)**.
+- **🎯 Kết luận**: Cổ phiếu có điểm Z-Score cao nhất = Tổng hợp tốt nhất trên tất cả tiêu chí!
             """
         )
 
@@ -1516,355 +1578,200 @@ else:
                 - Kéo trục để pan (di chuyển) biểu đồ
                 """)
 
-            fig = make_ohlcv_figure(
-                px_sel, chart_title,
-                default_months_view=3, right_pad_months=2, height=700,
-                show_ma9=show_ma9, show_ma20=show_ma20, show_ma50=show_ma50, 
-                show_ma200=show_ma200, show_bollinger=show_bollinger
-            )
+            # Tạo layout 2 cột: biểu đồ và báo cáo AI
+            chart_col, ai_col = st.columns([2, 1])
             
-            # Cấu hình plotly để có thể tương tác tốt hơn
-            plotly_config = {
-                "displaylogo": False,
-                "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"],
-                "modeBarButtonsToAdd": ["resetScale2d"],
-                "showTips": True,
-                "displayModeBar": True,
-                "responsive": True,
-                "doubleClick": "reset+autosize",  # Double click để reset về auto-scale
-                "scrollZoom": True,  # Bật zoom bằng cuộn chuột
-                "showAxisDragHandles": True,  # Hiển thị handles để kéo trục
-                "showAxisRangeEntryBoxes": True  # Hiển thị box để nhập range trực tiếp
-            }
-            
-            st.plotly_chart(fig, use_container_width=True, config=plotly_config)
-
-            st.markdown("**📜 Lịch sử giá (gần nhất)**")
-            
-            # Format dữ liệu để hiển thị đẹp
-            px_display = px_sel.sort_values("date", ascending=False).head(120).copy()
-            
-            # Format ngày theo kiểu dd/mm/yyyy
-            if "date" in px_display.columns:
-                px_display["date"] = pd.to_datetime(px_display["date"]).dt.strftime("%d/%m/%Y")
-            
-            # Format volume với dấu phẩy ngăn cách hàng nghìn
-            if "volume" in px_display.columns:
-                px_display["volume"] = px_display["volume"].apply(
-                    lambda x: f"{int(x):,}" if pd.notna(x) and x > 0 else "0"
+            # Cột bên trái: Biểu đồ
+            with chart_col:
+                fig = make_ohlcv_figure(
+                    px_sel, chart_title,
+                    default_months_view=3, right_pad_months=2, height=850,
+                    show_ma9=show_ma9, show_ma20=show_ma20, show_ma50=show_ma50, 
+                    show_ma200=show_ma200, show_bollinger=show_bollinger
                 )
+                
+                # Cấu hình plotly để có thể tương tác tốt hơn
+                plotly_config = {
+                    "displaylogo": False,
+                    "modeBarButtonsToRemove": ["lasso2d", "select2d", "autoScale2d"],
+                    "modeBarButtonsToAdd": ["resetScale2d"],
+                    "showTips": True,
+                    "displayModeBar": True,
+                    "responsive": True,
+                    "doubleClick": "reset+autosize",  # Double click để reset về auto-scale
+                    "scrollZoom": True,  # Bật zoom bằng cuộn chuột
+                    "showAxisDragHandles": True,  # Hiển thị handles để kéo trục
+                    "showAxisRangeEntryBoxes": True  # Hiển thị box để nhập range trực tiếp
+                }
+                
+                st.plotly_chart(fig, use_container_width=True, config=plotly_config)
             
-            # Format các cột giá với 2 chữ số thập phân
-            price_cols = ["open", "high", "low", "close"]
-            for col in price_cols:
-                if col in px_display.columns:
-                    px_display[col] = px_display[col].apply(
-                        lambda x: f"{float(x):,.2f}" if pd.notna(x) else "N/A"
+            # Cột bên phải: Báo cáo AI
+            with ai_col:
+                # Kiểm tra trạng thái báo cáo
+                current_analyzing_symbol = st.session_state.get("selected_symbol", "")
+                api_key = st.session_state.get("openai_api_key", "") or ""
+                cached_reports = st.session_state.get("form_cache", {})
+                has_report = current_analyzing_symbol in cached_reports
+                
+                # Auto-generate report if conditions are met
+                api_key = st.session_state.get("openai_api_key", "") or ""
+                if api_key and not has_report:
+                        
+                        # Lấy tech_stats cho symbol hiện tại
+                        px_sel_current = st.session_state.get("screener_store", {}).get("px_map", {}).get(current_analyzing_symbol)
+                        if px_sel_current is not None and not px_sel_current.empty:
+                            tech_stats_current = build_structured_stats(px_sel_current)
+                            snapshot_df = store.get("snapshot_df", pd.DataFrame())
+                            company_name = _company_name_from_snapshot(snapshot_df, current_analyzing_symbol)
+                            
+                            key = st.session_state.get("openai_api_key", "")
+                            model = "gpt-4o-mini"
+                            template = st.session_state.get("analysis_template", "")
+                            prompt = st.session_state.get("analysis_prompt", "")
+                            system_prompt = st.session_state.get("system_prompt", "")
+                            
+                            with st.spinner("🤖 Đang tạo..."):
+                                report = call_llm_structured_report(
+                                    key, model, current_analyzing_symbol, tech_stats_current,
+                                    template=template, prompt=prompt, system_prompt=system_prompt, company_name=company_name
+                                )
+                                st.session_state.setdefault("form_cache", {})[current_analyzing_symbol] = report
+                            st.rerun()
+                
+                # Hiển thị báo cáo AI
+                form_text = cached_reports.get(current_analyzing_symbol)
+                if form_text:
+                    # Hiển thị báo cáo trong container với scroll
+                    with st.container(height=780):
+                        st.markdown(form_text)
+                    
+                    # Download button compact
+                    st.download_button(
+                        label="⬇️ Tải báo cáo",
+                        data="\ufeff" + form_text,
+                        file_name=f"{current_analyzing_symbol}_PTKT.txt",
+                        mime="text/plain; charset=utf-8",
+                        use_container_width=True
                     )
-            
-            # Format giá trị giao dịch nếu có
-            if "value" in px_display.columns:
-                px_display["value"] = px_display["value"].apply(
-                    lambda x: f"{int(x):,}" if pd.notna(x) and x > 0 else "0"
-                )
-            
-            # Column config cho bảng lịch sử giá
-            price_column_config = {
-                "date": cc.TextColumn("Ngày"),
-                "open": cc.TextColumn("Mở cửa"),
-                "high": cc.TextColumn("Cao nhất"),
-                "low": cc.TextColumn("Thấp nhất"),
-                "close": cc.TextColumn("Đóng cửa"),
-                "volume": cc.TextColumn("Khối lượng"),
-                "value": cc.TextColumn("Giá trị")
-            }
-            st.dataframe(px_display, use_container_width=True, height=320, column_config=price_column_config)
+                elif not api_key:
+                    st.info("💡 Nhập OpenAI API Key để sử dụng báo cáo AI")
 
-            # ====== 📄 Báo cáo theo FORM kỹ thuật (MA20/50/200) ======
+            # ====== 📜 Lịch sử giá (có thể ẩn/hiện) ======
             st.markdown("---")
             
-            # Quick Symbol Selector cho báo cáo AI
-            st.markdown("### 📄 Báo cáo AI - Phân tích kỹ thuật")
-            
-            # Hiển thị mã đang được phân tích
-            current_analyzing_symbol = st.session_state.get("selected_symbol", "")
-            if current_analyzing_symbol:
-                st.markdown(f"""
-                <div style="background: linear-gradient(90deg, #ff9a9e 0%, #fecfef 50%, #fecfef 100%); 
-                           padding: 15px; border-radius: 8px; margin-bottom: 15px; border-left: 4px solid #ff6b6b;">
-                    <h4 style="margin: 0; color: #2c3e50;">
-                        🔍 Đang phân tích: <strong>{current_analyzing_symbol}</strong>
-                    </h4>
-                </div>
-                """, unsafe_allow_html=True)
-            
-            # Hiển thị tiến trình báo cáo AI
-            store = st.session_state.get("screener_store", {})
-            if store:
-                ranked = store.get("ranked", pd.DataFrame())
-                if not ranked.empty:
-                    top_syms = ranked.head(20)["symbol"].tolist()
-                    cached_reports = st.session_state.get("form_cache", {})
-                    reports_count = len([s for s in top_syms if s in cached_reports])
-                    total_count = len(top_syms)
-                    progress_pct = (reports_count / total_count) * 100 if total_count > 0 else 0
-                    
-                    st.markdown(f"""
-                    <div style="background: linear-gradient(90deg, #4facfe 0%, #00f2fe 100%); 
-                               padding: 12px; border-radius: 6px; margin-bottom: 15px;">
-                        <p style="margin: 0; color: white; font-weight: bold;">
-                            📊 Tiến trình báo cáo AI: {reports_count}/{total_count} ({progress_pct:.0f}%)
-                        </p>
-                    </div>
-                    """, unsafe_allow_html=True)
-            
-            # Tạo container có border để làm nổi bật
-            with st.container(border=True):
-                st.markdown("**🎯 Chọn mã cổ phiếu để xem báo cáo AI:**")
+            # Tạo expander cho lịch sử giá với tính năng ẩn/hiện
+            with st.expander("📜 Lịch sử giá chi tiết", expanded=False):
+                # Tùy chọn số phiên hiển thị
+                col_option1, col_option2 = st.columns([1, 3])
                 
-                # Thêm quick bookmarks cho các mã thường xem
-                if "ai_bookmarks" not in st.session_state:
-                    st.session_state["ai_bookmarks"] = []
-                
-                bookmarks = st.session_state["ai_bookmarks"]
-                if bookmarks:
-                    st.markdown("**⭐ Mã đã đánh dấu:**")
-                    bookmark_cols = st.columns(min(len(bookmarks), 6))
-                    for i, bookmark in enumerate(bookmarks[:6]):  # Giới hạn 6 bookmark hiển thị
-                        with bookmark_cols[i]:
-                            cached_reports = st.session_state.get("form_cache", {})
-                            status_emoji = "✅" if bookmark in cached_reports else "⏳"
-                            if st.button(f"{status_emoji} {bookmark}", key=f"bookmark_{bookmark}", 
-                                       use_container_width=True, help=f"Chuyển đến {bookmark}"):
-                                st.session_state["selected_symbol"] = bookmark
-                                st.rerun()
-                
-                col_quick1, col_quick2 = st.columns([2, 1])
-                
-                with col_quick1:
-                    # Quick selector từ top symbols
-                    cached_reports = st.session_state.get("form_cache", {})
-                    
-                    # Tạo danh sách với báo cáo có sẵn ở đầu
-                    symbols_with_reports = [s for s in top_syms if s in cached_reports]
-                    symbols_without_reports = [s for s in top_syms if s not in cached_reports]
-                    ordered_symbols = symbols_with_reports + symbols_without_reports
-                    
-                    # Hiển thị trạng thái báo cáo trong selectbox options
-                    symbol_options = []
-                    for sym in ordered_symbols:
-                        if sym in cached_reports:
-                            symbol_options.append(f"✅ {sym}")
-                        else:
-                            symbol_options.append(f"⏳ {sym}")
-                    
-                    # Tìm index hiện tại
-                    current_symbol = st.session_state.get("selected_symbol", ordered_symbols[0] if ordered_symbols else "")
-                    try:
-                        if current_symbol in cached_reports:
-                            current_index = symbol_options.index(f"✅ {current_symbol}")
-                        else:
-                            current_index = symbol_options.index(f"⏳ {current_symbol}")
-                    except ValueError:
-                        current_index = 0
-                    
-                    selected_option = st.selectbox(
-                        "Chọn mã từ danh sách:",
-                        options=symbol_options,
-                        index=current_index,
-                        key="ai_symbol_selector",
-                        help="✅ = Đã có báo cáo AI, ⏳ = Chưa có báo cáo"
+                with col_option1:
+                    num_sessions = st.number_input(
+                        "Số phiên:",
+                        min_value=10,
+                        max_value=500,
+                        value=50,
+                        step=10,
+                        key="history_sessions_input",
+                        help="Nhập số phiên muốn hiển thị (10-500)"
                     )
-                    
-                    # Cập nhật selected_symbol từ quick selector
-                    if selected_option:
-                        new_symbol = selected_option.split(" ", 1)[1]  # Lấy phần sau emoji
-                        if new_symbol != st.session_state.get("selected_symbol"):
-                            st.session_state["selected_symbol"] = new_symbol
-                            st.rerun()
                 
-                with col_quick2:
-                    # Bookmark và manual input
-                    bookmark_col, manual_col = st.columns([1, 3])
-                    
-                    current_idx = ordered_symbols.index(current_symbol) if current_symbol in ordered_symbols else 0
-                    
-                    with bookmark_col:
-                        # Bookmark button
-                        is_bookmarked = current_symbol in st.session_state.get("ai_bookmarks", [])
-                        bookmark_icon = "⭐" if is_bookmarked else "☆"
-                        bookmark_help = "Bỏ đánh dấu" if is_bookmarked else "Đánh dấu mã này"
-                        
-                        if st.button(bookmark_icon, key="toggle_bookmark", help=bookmark_help):
-                            if "ai_bookmarks" not in st.session_state:
-                                st.session_state["ai_bookmarks"] = []
-                            
-                            if is_bookmarked:
-                                st.session_state["ai_bookmarks"].remove(current_symbol)
-                            else:
-                                if current_symbol not in st.session_state["ai_bookmarks"]:
-                                    st.session_state["ai_bookmarks"].append(current_symbol)
-                                # Giới hạn số bookmark
-                                if len(st.session_state["ai_bookmarks"]) > 10:
-                                    st.session_state["ai_bookmarks"] = st.session_state["ai_bookmarks"][-10:]
-                            st.rerun()
-                    
-                    with manual_col:
-                        # Quick manual input
-                        manual_symbol = st.text_input(
-                            "Nhập mã khác:",
-                            key="quick_manual_input",
-                            placeholder="VD: VNM",
-                            help="Nhập mã và nhấn Enter"
+                with col_option2:
+                    st.markdown(f"**Dữ liệu giá {num_sessions} phiên gần nhất**")
+                
+                # Format dữ liệu để hiển thị đẹp (auto hiển thị tất cả các cột)
+                px_display = px_sel.sort_values("date", ascending=False).head(num_sessions).copy()
+                
+                # Format ngày theo kiểu dd/mm/yyyy
+                if "date" in px_display.columns:
+                    px_display["date"] = pd.to_datetime(px_display["date"]).dt.strftime("%d/%m/%Y")
+                
+                # Format các cột giá với 2 chữ số thập phân
+                price_cols = ["open", "high", "low", "close"]
+                for col in price_cols:
+                    if col in px_display.columns:
+                        px_display[col] = px_display[col].apply(
+                            lambda x: f"{float(x):,.2f}" if pd.notna(x) else "N/A"
                         )
-                        
-                        # Auto-advance option
-                        auto_advance = st.checkbox(
-                            "🔄 Tự động chuyển mã tiếp theo", 
-                            key="auto_advance_symbols",
-                            help="Tự động chuyển đến mã tiếp theo sau 5 giây khi đã có báo cáo"
-                        )
-                    
-                    if manual_symbol and manual_symbol.upper() != st.session_state.get("selected_symbol"):
-                        st.session_state["selected_symbol"] = manual_symbol.upper()
-                        st.rerun()
-            
-            # Cập nhật lại selected_symbol và px_sel
-            selected_symbol = st.session_state["selected_symbol"]
-            px_sel = px_map.get(selected_symbol)
-            if (px_sel is None) or px_sel.empty:
-                try:
-                    price_sources = [store["sources"][0]] if store.get("sources") else ["TCBS"]
-                    px_sel = _get_quote_history_cached(selected_symbol, int(store["params"]["days"]), store["ed_str"], price_sources)
-                    st.session_state["screener_store"]["px_map"][selected_symbol] = px_sel
-                except Exception:
-                    px_sel = pd.DataFrame()
-            
-            tech_stats = build_structured_stats(px_sel)
-
-            # Lấy tên công ty từ snapshot
-            store = st.session_state.get("screener_store", {})
-            snapshot_df = store.get("snapshot_df", pd.DataFrame())
-            company_name = _company_name_from_snapshot(snapshot_df, selected_symbol)
-
-            # Kiểm tra trạng thái báo cáo
-            api_key = st.session_state.get("openai_api_key", "") or ""
-            cached_reports = st.session_state.get("form_cache", {})
-            has_report = selected_symbol in cached_reports
                 
-            # Hiển thị trạng thái báo cáo
-            col_status, col_manual = st.columns([2, 1])
-            
-            with col_status:
-                if not api_key:
-                    st.info("🔑 Nhập OpenAI API Key để sử dụng tính năng phân tích tự động")
-                elif has_report:
-                    st.success("✅ Báo cáo AI đã có sẵn")
-                else:
-                    st.info("⏳ Báo cáo chưa được tạo - chạy phân tích để tự động tạo báo cáo")
-            
-            with col_manual:
-                if api_key:
-                    if st.button("🔄 Tạo lại báo cáo", key=f"regenerate_btn_{selected_symbol}", 
-                               help="Tạo lại báo cáo mới (ghi đè báo cáo hiện tại)"):
-                        # Xóa báo cáo cũ và tạo mới
-                        if "form_cache" in st.session_state and selected_symbol in st.session_state["form_cache"]:
-                            del st.session_state["form_cache"][selected_symbol]
-                        
-                        key = st.session_state.get("openai_api_key", "") or ""
-                        model = llm_model or "gpt-4o-mini"
-                        template = st.session_state.get("analysis_template", "")
-                        prompt = st.session_state.get("analysis_prompt", "")
-                        system_prompt = st.session_state.get("system_prompt", "")
-                        
-                        with st.spinner("🤖 Đang tạo báo cáo mới..."):
-                            report = call_llm_structured_report(
-                                key, model, selected_symbol, tech_stats,
-                                template=template, prompt=prompt, system_prompt=system_prompt, company_name=company_name
-                            )
-                            st.session_state.setdefault("form_cache", {})[selected_symbol] = report
-                        st.rerun()
-                else:
-                    if st.button("📝 Tạo báo cáo thủ công", key=f"manual_btn_{selected_symbol}",
-                               help="Tạo báo cáo khi chưa có API key"):
-                        st.warning("⚠️ Cần OpenAI API Key để tạo báo cáo AI")
-
-            form_text = (st.session_state.get("form_cache") or {}).get(selected_symbol)
-            if form_text:
-                # Hiển thị header với mã và tên công ty
-                st.markdown(f"""
-                        📊 Phân tích kỹ thuật: {selected_symbol}
-                """, unsafe_allow_html=True)
+                # Format volume và value nếu có
+                if "volume" in px_display.columns:
+                    px_display["volume"] = px_display["volume"].apply(
+                        lambda x: f"{int(x):,}" if pd.notna(x) and x > 0 else "0"
+                    )
                 
-                st.markdown(form_text)
-                st.download_button(
-                    label="⬇️ Tải báo cáo (.txt)",
-                    data="\ufeff" + form_text,
-                    file_name=f"{selected_symbol}_PTKT_{store['ed_str']}.txt",
-                    mime="text/plain; charset=utf-8"
+                if "value" in px_display.columns:
+                    px_display["value"] = px_display["value"].apply(
+                        lambda x: f"{int(x):,}" if pd.notna(x) and x > 0 else "0"
+                    )
+                
+                # Column config tự động cho tất cả các cột
+                auto_column_config = {
+                    "date": cc.TextColumn("Ngày", width="small"),
+                    "open": cc.TextColumn("Mở cửa", width="small"),
+                    "high": cc.TextColumn("Cao nhất", width="small"),
+                    "low": cc.TextColumn("Thấp nhất", width="small"), 
+                    "close": cc.TextColumn("Đóng cửa", width="small"),
+                    "volume": cc.TextColumn("Khối lượng", width="medium"),
+                    "value": cc.TextColumn("Giá trị GD", width="medium")
+                }
+                
+                # Chỉ giữ config cho các cột thực sự có trong data
+                final_column_config = {k: v for k, v in auto_column_config.items() if k in px_display.columns}
+                
+                # Tự động điều chỉnh chiều cao theo số phiên
+                table_height = min(500, max(200, num_sessions * 8 + 50))
+                
+                # Hiển thị bảng
+                st.dataframe(
+                    px_display, 
+                    use_container_width=True, 
+                    height=table_height, 
+                    column_config=final_column_config,
+                    hide_index=True
                 )
                 
-                # Auto-advance logic
-                auto_advance = st.session_state.get("auto_advance_symbols", False)
-                if auto_advance:
-                    top_syms = st.session_state.get("top_syms", [])
-                    current_symbol = selected_symbol
+                # Thống kê tóm tắt (thêm metric giá đóng cửa gần nhất)
+                st.markdown(f"**📊 Thống kê {num_sessions} phiên gần nhất:**")
+                col_stat1, col_stat2, col_stat3, col_stat4, col_stat5 = st.columns(5)
+                
+                if len(px_sel) > 0:
+                    # Lấy dữ liệu theo số phiên đã chọn, sắp xếp theo thời gian tăng dần để tính đúng
+                    period_data = px_sel.tail(num_sessions).sort_values("date", ascending=True)
                     
-                    # Kiểm tra xem tất cả các mã đã có báo cáo chưa
-                    cached_reports = st.session_state.get("form_cache", {})
-                    symbols_with_reports = [sym for sym in top_syms if sym in cached_reports]
+                    with col_stat1:
+                        # Giá đóng cửa gần nhất (phiên mới nhất)
+                        latest_close = period_data["close"].iloc[-1]
+                        st.metric("Giá hiện tại", f"{latest_close:,.2f}")
                     
-                    if len(symbols_with_reports) >= len(top_syms):
-                        st.success("🎉 Đã hoàn thành tạo báo cáo cho tất cả các mã trong danh sách!")
-                    elif current_symbol in top_syms:
-                        current_index = top_syms.index(current_symbol)
-                        
-                        # Tìm mã tiếp theo chưa có báo cáo
-                        next_symbol = None
-                        for i in range(current_index + 1, len(top_syms)):
-                            if top_syms[i] not in cached_reports:
-                                next_symbol = top_syms[i]
-                                break
-                        
-                        if next_symbol:
-                            # Chuyển đến mã tiếp theo sau 3 giây
-                            # Kiểm tra xem đã setup timer chưa
-                            timer_key = f"auto_advance_timer_{current_symbol}"
-                            if timer_key not in st.session_state:
-                                st.session_state[timer_key] = time.time()
-                                st.info(f"🔄 Sẽ tự động chuyển đến mã **{next_symbol}** sau 3 giây...")
-                                time.sleep(0.5)
-                                st.rerun()
-                            elif time.time() - st.session_state[timer_key] >= 3:
-                                # Đã đủ 3 giây, chuyển mã
-                                del st.session_state[timer_key]
-                                st.session_state["selected_symbol"] = next_symbol
-                                st.success(f"🏁 Đã chuyển sang mã **{next_symbol}**!")
-                                time.sleep(0.5)
-                                st.rerun()
-                            else:
-                                # Hiển thị đếm ngược
-                                remaining = 3 - (time.time() - st.session_state[timer_key])
-                                st.info(f"🔄 Chuyển đến mã **{next_symbol}** sau {remaining:.1f} giây...")
-                                time.sleep(0.5)
-                                st.rerun()
+                    with col_stat2:
+                        highest = period_data["high"].max()
+                        st.metric("Cao nhất", f"{highest:,.2f}")
+                    
+                    with col_stat3:
+                        lowest = period_data["low"].min()
+                        st.metric("Thấp nhất", f"{lowest:,.2f}")
+                    
+                    with col_stat4:
+                        if len(period_data) >= 2:
+                            # Giá đầu kỳ (cũ nhất) và cuối kỳ (mới nhất) 
+                            first_close = period_data["close"].iloc[0]  # Phiên cũ nhất
+                            last_close = period_data["close"].iloc[-1]  # Phiên mới nhất
+                            change_pct = ((last_close - first_close) / first_close) * 100
+                            st.metric("Biến động", f"{change_pct:+.2f}%")
                         else:
-                            st.success("� Đã hoàn thành tạo báo cáo cho tất cả các mã trong danh sách!")
-                    else:
-                        st.info("🏁 Mã hiện tại không trong danh sách phân tích!")
-                        
-            elif not api_key:
-                st.info("💡 **Để sử dụng tính năng báo cáo AI:**\n"
-                       "1. Nhập OpenAI API Key ở phần cấu hình bên trái\n"
-                       "2. Báo cáo sẽ được tự động tạo cho mỗi mã cổ phiếu\n"
-                       "3. Có thể tùy chỉnh template và prompt ở phần 'Cấu hình Prompt & Template AI'")
-            else:
-                if not has_report:
-                    st.info("🔄 Chưa có báo cáo cho mã này - chạy phân tích để tự động tạo")
+                            st.metric("Biến động", "N/A")
+                    
+                    with col_stat5:
+                        if "volume" in period_data.columns:
+                            avg_volume = period_data["volume"].mean()
+                            st.metric("KL TB", f"{avg_volume:,.0f}")
+                        else:
+                            st.metric("KL TB", "N/A")
 
-            # ====== 📰 Công bố/hoạt động 7 ngày gần đây (TCBS) ======
-            st.markdown("### 📰 Công bố trong 7 ngày gần đây (TCBS)")
-            raw = fetch_activity_news_raw(selected_symbol, size=100)
+            # ====== Tin tức trong 7 ngày gần đây (TCBS) ======
+            st.markdown("### Tin tức trong 7 ngày gần đây (TCBS)")
+            raw = fetch_activity_news_raw(st.session_state.get("selected_symbol", ""), size=100)
             recent_items = filter_recent_activity_news(raw, recent_days=7)
             if not recent_items:
                 st.markdown("_Không thấy công bố trong 7 ngày gần đây_")

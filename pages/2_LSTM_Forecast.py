@@ -45,9 +45,40 @@ except Exception:
     tf = None
 
 # Page config with enhanced styling
-set_page_config("🔮 LSTM Forecast", "🔮")
+set_page_config("LSTM Forecast", "🔮")
 apply_theme()
 load_css()
+
+# ========================================
+# TRANG ĐANG PHÁT TRIỂN - TẠM THỜI KHÔNG CHO TRUY CẬP
+# ========================================
+st.markdown("""
+<div style="text-align: center; padding: 100px 20px; background: linear-gradient(135deg, #667eea 0%, #764ba2 100%); border-radius: 15px; margin: 20px 0;">
+    <h1 style="color: white; font-size: 3rem; margin-bottom: 20px;">🚧 Tính năng đang phát triển</h1>
+    <p style="color: white; font-size: 1.5rem; margin-bottom: 30px;">
+        Trang dự báo giá LSTM đang được hoàn thiện và sẽ sớm ra mắt
+    </p>
+    <div style="background: rgba(255,255,255,0.2); padding: 20px; border-radius: 10px; margin: 20px auto; max-width: 600px;">
+        <h3 style="color: white; margin-bottom: 15px;">🔮 Tính năng sắp tới:</h3>
+        <ul style="color: white; text-align: left; font-size: 1.1rem; line-height: 1.8;">
+            <li>Dự báo giá cổ phiếu bằng mô hình LSTM</li>
+            <li>Phân tích xu hướng giá trong tương lai</li>
+            <li>Đánh giá độ tin cậy của dự báo</li>
+            <li>Visualization tương tác và chuyên nghiệp</li>
+        </ul>
+    </div>
+    <p style="color: white; font-size: 1.2rem; margin-top: 30px;">
+        💡 Vui lòng quay lại sau để trải nghiệm tính năng mới!
+    </p>
+</div>
+""", unsafe_allow_html=True)
+
+# Dừng thực thi tại đây để không load nội dung chính
+st.stop()
+
+# ========================================
+# NỘI DUNG CHÍNH (TẠM THỜI BỊ VÔ HIỆU HÓA)
+# ========================================
 
 st.markdown("""
 <div class="forecast-header">

@@ -36,9 +36,9 @@ load_css()
 # Hero Section
 st.markdown("""
 <div class="main-header">
-    <h1 style="color: white !important; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">🚀 VN Stock AI Platform</h1>
+    <h1 style="color: white !important; text-shadow: 0 2px 4px rgba(0,0,0,0.3);">Stock AI Platform</h1>
     <p style="font-size: 1.2rem; margin-top: 1rem; color: white !important; text-shadow: 0 1px 3px rgba(0,0,0,0.3);">
-        Nền tảng phân tích và dự báo chứng khoán Việt Nam thông minh
+        Phân tích và dự báo chứng khoán Việt Nam thông minh
     </p>
 </div>
 """, unsafe_allow_html=True)
@@ -70,7 +70,7 @@ col1, col2 = st.columns(2)
 with col1:
     st.markdown("""
     <div class="feature-card">
-        <h3>📊 Stock Screener</h3>
+        <h3>📊 FinStock</h3>
         <p><strong>Công cụ sàng lọc & chấm điểm cổ phiếu</strong></p>
         <ul>
             <li>🎯 Chấm điểm đa tiêu chí (kỹ thuật + cơ bản)</li>
@@ -104,10 +104,10 @@ st.markdown("### 🎯 Truy cập nhanh")
 if hasattr(st, "switch_page"):
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("� Mở Stock Screener", key="screener_btn", use_container_width=True):
-            st.switch_page("pages/1_Screener.py")
+        if st.button("FinStock", key="screener_btn", use_container_width=True):
+            st.switch_page("pages/1_FinStock.py")
     with col2:
-        if st.button("� Mở LSTM Forecast", key="forecast_btn", use_container_width=True):
+        if st.button("LSTM Forecast", key="forecast_btn", use_container_width=True):
             st.switch_page("pages/2_LSTM_Forecast.py")
 else:
     st.info(
@@ -117,17 +117,6 @@ else:
 # Additional info section
 st.markdown("<br><br>", unsafe_allow_html=True)
 st.markdown("---")
-
-col1, col2, col3 = st.columns(3)
-
-with col1:
-    st.markdown(create_metric_card("⚡ Hiệu suất", "Cao", "Xử lý dữ liệu nhanh chóng với cache thông minh"), unsafe_allow_html=True)
-
-with col2:
-    st.markdown(create_metric_card("🔒 Bảo mật", "Đảm bảo", "Dữ liệu được mã hóa và bảo vệ an toàn"), unsafe_allow_html=True)
-
-with col3:
-    st.markdown(create_metric_card("📱 Responsive", "Tối ưu", "Tối ưu cho mọi thiết bị và kích thước màn hình"), unsafe_allow_html=True)
 
 # Footer
 st.markdown("<br>", unsafe_allow_html=True)
